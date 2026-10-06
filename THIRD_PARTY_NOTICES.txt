@@ -1,0 +1,22 @@
+Auto TTS 1.0.0 - Third-party notices
+=====================================
+
+fastText prediction runtime
+---------------------------
+Copyright (c) 2016-present, Facebook, Inc.
+Licensed under the MIT License. The complete license is included at
+synthDrivers/autoTTS/fasttext_runtime/LICENSE.txt.
+
+The bundled Python prediction runtime is distributed by the fasttext-predict
+project: https://github.com/snapADDY/fasttext-predict
+
+fastText language-identification model
+--------------------------------------
+The bundled lid.176.ftz model identifies 176 languages and is distributed by
+the fastText project under Creative Commons Attribution-ShareAlike 3.0.
+Source: https://fasttext.cc/docs/en/language-identification.html
+License: https://creativecommons.org/licenses/by-sa/3.0/
+
+Model authors/citation:
+Armand Joulin, Edouard Grave, Piotr Bojanowski and Tomas Mikolov,
+"Bag of Tricks for Efficient Text Classification" (2016).

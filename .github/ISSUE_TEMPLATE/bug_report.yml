@@ -1,0 +1,30 @@
+name: Bug report
+description: Report an Auto TTS problem with reproducible details.
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: NVDA and Auto TTS versions
+      placeholder: 'NVDA 2026.1.1; Auto TTS 1.0.0'
+    validations:
+      required: true
+  - type: textarea
+    id: voices
+    attributes:
+      label: Synthesizers, voices and language profiles
+      description: Include relevant detection, language lock and exclusion settings.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps and sample text
+      description: Remove private content from sample text and any logs.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
