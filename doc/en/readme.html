@@ -8,85 +8,62 @@
 body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 55rem; margin: 2rem auto; padding: 0 1rem; }
 table { border-collapse: collapse; width: 100%; }
 th, td { border: 1px solid #777; padding: .5rem; text-align: left; }
-code { overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
 <main>
 <h1>Auto TTS for NVDA</h1>
-<p>Version 1.0.0. Author: Raja Hamid. Minimum NVDA: 2023.3. Last tested
-NVDA version declared in the manifest: 2026.1.1.</p>
-<p>Auto TTS automatically switches between configured voices and synthesizers
-while NVDA reads multilingual text. Each language can have its own rate, pitch
-and volume. Mixed-language text stays in its original order.</p>
-<h2>Getting started</h2>
+<p>Auto TTS automatically detects text language and switches between the voices
+selected for each language. It supports multilingual content, including Urdu,
+Arabic and English.</p>
+<h2>Setup</h2>
 <ol>
-<li>Install your additional synthesizers and voices separately.</li>
-<li>Open NVDA menu, Preferences, Settings, Auto TTS, or press NVDA+Alt+A.</li>
-<li>Add an enabled profile for each language, then choose its synthesizer and voice.</li>
-<li>Enable custom prosody for profile-specific rate, pitch and volume. Otherwise,
-the profile uses the underlying synthesizer's settings.</li>
-<li>Set your usual language as the default, test speech, and save settings.</li>
-<li>Press NVDA+Ctrl+S, select Auto TTS for NVDA as the synthesizer, and confirm.</li>
+<li>Open NVDA menu, Preferences, Settings, Auto TTS.</li>
+<li>Add a profile for each language and select its synthesizer and voice.</li>
+<li>Choose your default language. Enable custom rate, pitch and volume if needed.</li>
+<li>Use Test Speech to check the voices, then save settings.</li>
+<li>Press NVDA+Ctrl+S and select Auto TTS for NVDA as the synthesizer.</li>
 </ol>
-<p>A fresh installation initially follows NVDA's language. eSpeak NG is available
-as a fallback. You do not need to install Python, fastText or a language model.</p>
-<h2>Detection settings</h2>
-<p>Use Word-by-Word for several writing scripts in one sentence. Sentence and
-line modes reduce switching. Use Detect from text for unreliable language tags,
-or Trust document language tags for correctly tagged books and web content.</p>
-<p>Urdu/Arabic rules inspect characters and Quranic marks. Offline fastText
-detection helps distinguish configured languages sharing a writing script. It
-selects enabled profiles only and may retain the current language for short or
-ambiguous text. If the native detector cannot load, Unicode and document-tag
-routing remain available.</p>
-<p>Math follows the current language by default; an enabled profile can be
-selected for math instead. Number-language behavior is configurable. Excluded
-applications use the default profile without automatic switching. Common editors
-and terminals are initially excluded; edit the exclusions list as needed.</p>
+<p>Additional synthesizers and voices must be installed separately.</p>
+<h2>Language settings</h2>
+<p>Word-by-Word mode is suitable for mixed-language sentences. Sentence and line
+modes can reduce frequent voice changes. Choose Detect from text for automatic
+detection, or Trust document language tags to follow the document's settings.</p>
+<p>Offline detection uses enabled language profiles. Short or ambiguous text
+may keep the current language. Math and numbers can use the current language
+or another language selected in settings.</p>
 <h2>Keyboard shortcuts</h2>
 <table>
-<caption>Default Auto TTS and NVDA settings-ring shortcuts</caption>
+<caption>Default Auto TTS shortcuts</caption>
 <thead><tr><th scope="col">Shortcut</th><th scope="col">Action</th></tr></thead>
 <tbody>
 <tr><td>NVDA+Alt+A</td><td>Open Auto TTS settings.</td></tr>
-<tr><td>NVDA+Shift+L</td><td>Toggle automatic language switching.</td></tr>
-<tr><td>NVDA+Alt+L</td><td>Choose a profile to lock the language, or unlock.</td></tr>
-<tr><td>NVDA+Ctrl+T</td><td>Announce status and language lock.</td></tr>
-<tr><td>NVDA+Ctrl+Left/Right</td><td>Select a synthesizer settings-ring item.</td></tr>
-<tr><td>NVDA+Ctrl+Up/Down</td><td>Change the selected settings-ring value.</td></tr>
+<tr><td>NVDA+Shift+L</td><td>Turn automatic language switching on or off.</td></tr>
+<tr><td>NVDA+Alt+L</td><td>Lock speech to a language or unlock it.</td></tr>
+<tr><td>NVDA+Ctrl+T</td><td>Announce Auto TTS status.</td></tr>
 </tbody>
 </table>
-<p>Reassign Auto TTS shortcuts in Preferences, Input gestures, Auto TTS. Language
-lock lasts only for the current session. The ring lists configured profiles;
-custom prosody changes apply to the selected profile, while other prosody changes
-apply to its underlying synthesizer.</p>
-<h2>Settings and backups</h2>
-<p>Use Export Settings to save a separate <code>.autotts</code> or JSON backup,
-and Import Settings to restore one. Settings live in <code>addons/autoTTS.json</code>
-inside NVDA's user configuration directory, outside the add-on package. The
-previous complete settings are kept in <code>autoTTS.json.bak</code>. Profiles can
-be recovered from missing, corrupt or unexpectedly empty primary settings.</p>
-<p>If you used a higher-numbered development package, export settings before
-replacing it with 1.0.0. NVDA may display a downgrade prompt.</p>
-<h2>Privacy and troubleshooting</h2>
-<p>Language identification runs locally without uploading text or downloading
-a model. A third-party synthesizer may use an online service and follows its
-own network behavior and privacy policy.</p>
-<p>If the wrong voice speaks, check that Auto TTS is active, the profile is
-enabled, language lock is off, the application is not excluded, and the chosen
-voice supports the language. Sequential mixed-synth speech depends on reliable
-completion notifications from the underlying drivers.</p>
-<p>When reporting a problem, include NVDA and Auto TTS versions, synthesizers,
-voices, relevant settings, sample text and reproduction steps. Remove private
-content from samples and logs before posting publicly.</p>
-<h2>Project and licenses</h2>
-<p><a href="https://github.com/hamid7780/autoTTS">Source and documentation</a>;
-<a href="https://github.com/hamid7780/autoTTS/releases/latest">Latest release</a>;
-<a href="https://github.com/hamid7780/autoTTS/issues">Report a problem</a>.</p>
-<p>Auto TTS source uses GPL version 2. The bundled fastText runtime uses the MIT
-License, and the language model uses CC BY-SA 3.0. See the packaged COPYING.txt
-and THIRD_PARTY_NOTICES.txt for licenses, attribution and component sources.</p>
+<p>Change shortcuts under Preferences, Input gestures, Auto TTS. Language lock
+ends when NVDA restarts. NVDA's synthesizer settings ring can also change the
+selected profile's speech settings.</p>
+<h2>Applications and backups</h2>
+<p>Excluded applications use the default language without automatic switching.
+Some editors and terminals are excluded by default. Edit the exclusions list
+to enable switching in those applications.</p>
+<p>Use Export Settings to save language profiles and Import Settings to restore
+them. Language detection runs locally. Online synthesizers may require an
+internet connection.</p>
+<h2>Support</h2>
+<p>If the wrong voice speaks, check that Auto TTS is selected, the language
+profile is enabled, language lock is off, and the application is not excluded.</p>
+<p><a href="https://github.com/hamid7780/autoTTS/issues">Report a problem</a>
+with your NVDA version, voices and steps to reproduce it.</p>
+<h2>Compatibility and license</h2>
+<p>Version 1.0.0. Minimum NVDA: 2023.3. Last tested NVDA: 2026.1.1.
+Author: Raja Hamid.</p>
+<p>Licensed under GNU GPL version 2. See COPYING.txt and THIRD_PARTY_NOTICES.txt
+for license information.</p>
+<p><a href="https://github.com/hamid7780/autoTTS">Project homepage</a>.</p>
 </main>
 </body>
 </html>

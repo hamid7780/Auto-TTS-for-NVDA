@@ -23,8 +23,8 @@ For a new stable version:
 GitHub Actions tests all three bundled runtime generations, builds the package
 and publishes a normal release with the `.nvda-addon` and SHA-256 checksum.
 The workflow refuses a tag whose version differs from the manifest. See Actions
-for failures before retrying. Published tags and assets should remain immutable;
-use a new version for subsequent changes.
+for failures before retrying. Re-running the tagged workflow updates the release
+notes and replaces its package attachments. Use a new version for functional changes.
 
 ## NVDA Add-on Store
 
@@ -48,9 +48,8 @@ Prepared values for this release:
 | Direct download | https://github.com/hamid7780/autoTTS/releases/download/v1.0.0/autoTTS-1.0.0.nvda-addon |
 | License | GPL-2.0, with bundled MIT and CC-BY-SA-3.0 components |
 | Minimum NVDA | `2023.3` |
-| Last tested NVDA declared in manifest | `2026.1.1` |
+| Last tested NVDA | `2026.1.1` |
 
 Use the checksum attached to the release if the form requests it. Verify that
 the compatibility versions are accepted in the store's current API list.
-Actual NVDA compatibility testing and publisher approval remain separate from
-source-level checks. Store registration has not been performed by this setup.
+Publisher approval and NVDA compatibility testing are required for store submissions.
