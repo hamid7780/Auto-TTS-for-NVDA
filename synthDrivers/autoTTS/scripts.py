@@ -1,958 +1,976 @@
 # Auto TTS for NVDA - Unicode Script Database
 # Covered by GNU General Public License (GPL)
+#
+# Sorted, non-overlapping (first, last, script) code point ranges. A binary
+# search replaces the former 150,000 entry dictionary, which cost several
+# megabytes and noticeable time every time NVDA started.
+
+from bisect import bisect_right
+
+_RANGES = (
+	(0x0, 0x40, "Common"),
+	(0x41, 0x5a, "Latin"),
+	(0x5b, 0x60, "Common"),
+	(0x61, 0x7a, "Latin"),
+	(0x7b, 0xa9, "Common"),
+	(0xaa, 0xaa, "Latin"),
+	(0xab, 0xb9, "Common"),
+	(0xba, 0xba, "Latin"),
+	(0xbb, 0xbf, "Common"),
+	(0xc0, 0xd6, "Latin"),
+	(0xd7, 0xd7, "Common"),
+	(0xd8, 0xf6, "Latin"),
+	(0xf7, 0xf7, "Common"),
+	(0xf8, 0x2b8, "Latin"),
+	(0x2b9, 0x2df, "Common"),
+	(0x2e0, 0x2e4, "Latin"),
+	(0x2e5, 0x2e9, "Common"),
+	(0x2ea, 0x2eb, "Bopomofo"),
+	(0x2ec, 0x2ff, "Common"),
+	(0x300, 0x36f, "Inherited"),
+	(0x370, 0x373, "Greek"),
+	(0x374, 0x374, "Common"),
+	(0x375, 0x377, "Greek"),
+	(0x37a, 0x37d, "Greek"),
+	(0x37e, 0x37e, "Common"),
+	(0x37f, 0x37f, "Greek"),
+	(0x384, 0x384, "Greek"),
+	(0x385, 0x385, "Common"),
+	(0x386, 0x386, "Greek"),
+	(0x387, 0x387, "Common"),
+	(0x388, 0x38a, "Greek"),
+	(0x38c, 0x38c, "Greek"),
+	(0x38e, 0x3a1, "Greek"),
+	(0x3a3, 0x3e1, "Greek"),
+	(0x3e2, 0x3ef, "Coptic"),
+	(0x3f0, 0x3ff, "Greek"),
+	(0x400, 0x484, "Cyrillic"),
+	(0x485, 0x486, "Inherited"),
+	(0x487, 0x52f, "Cyrillic"),
+	(0x531, 0x556, "Armenian"),
+	(0x559, 0x58a, "Armenian"),
+	(0x58d, 0x58f, "Armenian"),
+	(0x591, 0x5c7, "Hebrew"),
+	(0x5d0, 0x5ea, "Hebrew"),
+	(0x5ef, 0x5f4, "Hebrew"),
+	(0x600, 0x604, "Arabic"),
+	(0x605, 0x605, "Common"),
+	(0x606, 0x60b, "Arabic"),
+	(0x60c, 0x60c, "Common"),
+	(0x60d, 0x61a, "Arabic"),
+	(0x61b, 0x61b, "Common"),
+	(0x61c, 0x61e, "Arabic"),
+	(0x61f, 0x61f, "Common"),
+	(0x620, 0x63f, "Arabic"),
+	(0x640, 0x640, "Common"),
+	(0x641, 0x64a, "Arabic"),
+	(0x64b, 0x655, "Inherited"),
+	(0x656, 0x66f, "Arabic"),
+	(0x670, 0x670, "Inherited"),
+	(0x671, 0x6dc, "Arabic"),
+	(0x6dd, 0x6dd, "Common"),
+	(0x6de, 0x6ff, "Arabic"),
+	(0x700, 0x70d, "Syriac"),
+	(0x70f, 0x74a, "Syriac"),
+	(0x74d, 0x74f, "Syriac"),
+	(0x750, 0x77f, "Arabic"),
+	(0x780, 0x7b1, "Thaana"),
+	(0x7c0, 0x7fa, "Nko"),
+	(0x7fd, 0x7ff, "Nko"),
+	(0x800, 0x82d, "Samaritan"),
+	(0x830, 0x83e, "Samaritan"),
+	(0x840, 0x85b, "Mandaic"),
+	(0x85e, 0x85e, "Mandaic"),
+	(0x860, 0x86a, "Syriac"),
+	(0x870, 0x88e, "Arabic"),
+	(0x890, 0x891, "Arabic"),
+	(0x898, 0x8e1, "Arabic"),
+	(0x8e2, 0x8e2, "Common"),
+	(0x8e3, 0x8ff, "Arabic"),
+	(0x900, 0x950, "Devanagari"),
+	(0x951, 0x954, "Inherited"),
+	(0x955, 0x963, "Devanagari"),
+	(0x964, 0x965, "Common"),
+	(0x966, 0x97f, "Devanagari"),
+	(0x980, 0x983, "Bengali"),
+	(0x985, 0x98c, "Bengali"),
+	(0x98f, 0x990, "Bengali"),
+	(0x993, 0x9a8, "Bengali"),
+	(0x9aa, 0x9b0, "Bengali"),
+	(0x9b2, 0x9b2, "Bengali"),
+	(0x9b6, 0x9b9, "Bengali"),
+	(0x9bc, 0x9c4, "Bengali"),
+	(0x9c7, 0x9c8, "Bengali"),
+	(0x9cb, 0x9ce, "Bengali"),
+	(0x9d7, 0x9d7, "Bengali"),
+	(0x9dc, 0x9dd, "Bengali"),
+	(0x9df, 0x9e3, "Bengali"),
+	(0x9e6, 0x9fe, "Bengali"),
+	(0xa01, 0xa03, "Gurmukhi"),
+	(0xa05, 0xa0a, "Gurmukhi"),
+	(0xa0f, 0xa10, "Gurmukhi"),
+	(0xa13, 0xa28, "Gurmukhi"),
+	(0xa2a, 0xa30, "Gurmukhi"),
+	(0xa32, 0xa33, "Gurmukhi"),
+	(0xa35, 0xa36, "Gurmukhi"),
+	(0xa38, 0xa39, "Gurmukhi"),
+	(0xa3c, 0xa3c, "Gurmukhi"),
+	(0xa3e, 0xa42, "Gurmukhi"),
+	(0xa47, 0xa48, "Gurmukhi"),
+	(0xa4b, 0xa4d, "Gurmukhi"),
+	(0xa51, 0xa51, "Gurmukhi"),
+	(0xa59, 0xa5c, "Gurmukhi"),
+	(0xa5e, 0xa5e, "Gurmukhi"),
+	(0xa66, 0xa76, "Gurmukhi"),
+	(0xa81, 0xa83, "Gujarati"),
+	(0xa85, 0xa8d, "Gujarati"),
+	(0xa8f, 0xa91, "Gujarati"),
+	(0xa93, 0xaa8, "Gujarati"),
+	(0xaaa, 0xab0, "Gujarati"),
+	(0xab2, 0xab3, "Gujarati"),
+	(0xab5, 0xab9, "Gujarati"),
+	(0xabc, 0xac5, "Gujarati"),
+	(0xac7, 0xac9, "Gujarati"),
+	(0xacb, 0xacd, "Gujarati"),
+	(0xad0, 0xad0, "Gujarati"),
+	(0xae0, 0xae3, "Gujarati"),
+	(0xae6, 0xaf1, "Gujarati"),
+	(0xaf9, 0xaff, "Gujarati"),
+	(0xb01, 0xb03, "Oriya"),
+	(0xb05, 0xb0c, "Oriya"),
+	(0xb0f, 0xb10, "Oriya"),
+	(0xb13, 0xb28, "Oriya"),
+	(0xb2a, 0xb30, "Oriya"),
+	(0xb32, 0xb33, "Oriya"),
+	(0xb35, 0xb39, "Oriya"),
+	(0xb3c, 0xb44, "Oriya"),
+	(0xb47, 0xb48, "Oriya"),
+	(0xb4b, 0xb4d, "Oriya"),
+	(0xb55, 0xb57, "Oriya"),
+	(0xb5c, 0xb5d, "Oriya"),
+	(0xb5f, 0xb63, "Oriya"),
+	(0xb66, 0xb77, "Oriya"),
+	(0xb82, 0xb83, "Tamil"),
+	(0xb85, 0xb8a, "Tamil"),
+	(0xb8e, 0xb90, "Tamil"),
+	(0xb92, 0xb95, "Tamil"),
+	(0xb99, 0xb9a, "Tamil"),
+	(0xb9c, 0xb9c, "Tamil"),
+	(0xb9e, 0xb9f, "Tamil"),
+	(0xba3, 0xba4, "Tamil"),
+	(0xba8, 0xbaa, "Tamil"),
+	(0xbae, 0xbb9, "Tamil"),
+	(0xbbe, 0xbc2, "Tamil"),
+	(0xbc6, 0xbc8, "Tamil"),
+	(0xbca, 0xbcd, "Tamil"),
+	(0xbd0, 0xbd0, "Tamil"),
+	(0xbd7, 0xbd7, "Tamil"),
+	(0xbe6, 0xbfa, "Tamil"),
+	(0xc00, 0xc0c, "Telugu"),
+	(0xc0e, 0xc10, "Telugu"),
+	(0xc12, 0xc28, "Telugu"),
+	(0xc2a, 0xc39, "Telugu"),
+	(0xc3c, 0xc44, "Telugu"),
+	(0xc46, 0xc48, "Telugu"),
+	(0xc4a, 0xc4d, "Telugu"),
+	(0xc55, 0xc56, "Telugu"),
+	(0xc58, 0xc5a, "Telugu"),
+	(0xc5d, 0xc5d, "Telugu"),
+	(0xc60, 0xc63, "Telugu"),
+	(0xc66, 0xc6f, "Telugu"),
+	(0xc77, 0xc7f, "Telugu"),
+	(0xc80, 0xc8c, "Kannada"),
+	(0xc8e, 0xc90, "Kannada"),
+	(0xc92, 0xca8, "Kannada"),
+	(0xcaa, 0xcb3, "Kannada"),
+	(0xcb5, 0xcb9, "Kannada"),
+	(0xcbc, 0xcc4, "Kannada"),
+	(0xcc6, 0xcc8, "Kannada"),
+	(0xcca, 0xccd, "Kannada"),
+	(0xcd5, 0xcd6, "Kannada"),
+	(0xcdd, 0xcde, "Kannada"),
+	(0xce0, 0xce3, "Kannada"),
+	(0xce6, 0xcef, "Kannada"),
+	(0xcf1, 0xcf3, "Kannada"),
+	(0xd00, 0xd0c, "Malayalam"),
+	(0xd0e, 0xd10, "Malayalam"),
+	(0xd12, 0xd44, "Malayalam"),
+	(0xd46, 0xd48, "Malayalam"),
+	(0xd4a, 0xd4f, "Malayalam"),
+	(0xd54, 0xd63, "Malayalam"),
+	(0xd66, 0xd7f, "Malayalam"),
+	(0xd81, 0xd83, "Sinhala"),
+	(0xd85, 0xd96, "Sinhala"),
+	(0xd9a, 0xdb1, "Sinhala"),
+	(0xdb3, 0xdbb, "Sinhala"),
+	(0xdbd, 0xdbd, "Sinhala"),
+	(0xdc0, 0xdc6, "Sinhala"),
+	(0xdca, 0xdca, "Sinhala"),
+	(0xdcf, 0xdd4, "Sinhala"),
+	(0xdd6, 0xdd6, "Sinhala"),
+	(0xdd8, 0xddf, "Sinhala"),
+	(0xde6, 0xdef, "Sinhala"),
+	(0xdf2, 0xdf4, "Sinhala"),
+	(0xe01, 0xe3a, "Thai"),
+	(0xe3f, 0xe3f, "Common"),
+	(0xe40, 0xe5b, "Thai"),
+	(0xe81, 0xe82, "Lao"),
+	(0xe84, 0xe84, "Lao"),
+	(0xe86, 0xe8a, "Lao"),
+	(0xe8c, 0xea3, "Lao"),
+	(0xea5, 0xea5, "Lao"),
+	(0xea7, 0xebd, "Lao"),
+	(0xec0, 0xec4, "Lao"),
+	(0xec6, 0xec6, "Lao"),
+	(0xec8, 0xece, "Lao"),
+	(0xed0, 0xed9, "Lao"),
+	(0xedc, 0xedf, "Lao"),
+	(0xf00, 0xf47, "Tibetan"),
+	(0xf49, 0xf6c, "Tibetan"),
+	(0xf71, 0xf97, "Tibetan"),
+	(0xf99, 0xfbc, "Tibetan"),
+	(0xfbe, 0xfcc, "Tibetan"),
+	(0xfce, 0xfd4, "Tibetan"),
+	(0xfd5, 0xfd8, "Common"),
+	(0xfd9, 0xfda, "Tibetan"),
+	(0x1000, 0x109f, "Myanmar"),
+	(0x10a0, 0x10c5, "Georgian"),
+	(0x10c7, 0x10c7, "Georgian"),
+	(0x10cd, 0x10cd, "Georgian"),
+	(0x10d0, 0x10fa, "Georgian"),
+	(0x10fb, 0x10fb, "Common"),
+	(0x10fc, 0x10ff, "Georgian"),
+	(0x1100, 0x11ff, "Hangul"),
+	(0x1200, 0x1248, "Ethiopic"),
+	(0x124a, 0x124d, "Ethiopic"),
+	(0x1250, 0x1256, "Ethiopic"),
+	(0x1258, 0x1258, "Ethiopic"),
+	(0x125a, 0x125d, "Ethiopic"),
+	(0x1260, 0x1288, "Ethiopic"),
+	(0x128a, 0x128d, "Ethiopic"),
+	(0x1290, 0x12b0, "Ethiopic"),
+	(0x12b2, 0x12b5, "Ethiopic"),
+	(0x12b8, 0x12be, "Ethiopic"),
+	(0x12c0, 0x12c0, "Ethiopic"),
+	(0x12c2, 0x12c5, "Ethiopic"),
+	(0x12c8, 0x12d6, "Ethiopic"),
+	(0x12d8, 0x1310, "Ethiopic"),
+	(0x1312, 0x1315, "Ethiopic"),
+	(0x1318, 0x135a, "Ethiopic"),
+	(0x135d, 0x137c, "Ethiopic"),
+	(0x1380, 0x1399, "Ethiopic"),
+	(0x13a0, 0x13f5, "Cherokee"),
+	(0x13f8, 0x13fd, "Cherokee"),
+	(0x1400, 0x167f, "Canadian_Aboriginal"),
+	(0x1680, 0x169c, "Ogham"),
+	(0x16a0, 0x16ea, "Runic"),
+	(0x16eb, 0x16ed, "Common"),
+	(0x16ee, 0x16f8, "Runic"),
+	(0x1700, 0x1715, "Tagalog"),
+	(0x171f, 0x171f, "Tagalog"),
+	(0x1720, 0x1734, "Hanunoo"),
+	(0x1735, 0x1736, "Common"),
+	(0x1740, 0x1753, "Buhid"),
+	(0x1760, 0x176c, "Tagbanwa"),
+	(0x176e, 0x1770, "Tagbanwa"),
+	(0x1772, 0x1773, "Tagbanwa"),
+	(0x1780, 0x17dd, "Khmer"),
+	(0x17e0, 0x17e9, "Khmer"),
+	(0x17f0, 0x17f9, "Khmer"),
+	(0x1800, 0x1801, "Mongolian"),
+	(0x1802, 0x1803, "Common"),
+	(0x1804, 0x1804, "Mongolian"),
+	(0x1805, 0x1805, "Common"),
+	(0x1806, 0x1819, "Mongolian"),
+	(0x1820, 0x1878, "Mongolian"),
+	(0x1880, 0x18aa, "Mongolian"),
+	(0x18b0, 0x18f5, "Canadian_Aboriginal"),
+	(0x1900, 0x191e, "Limbu"),
+	(0x1920, 0x192b, "Limbu"),
+	(0x1930, 0x193b, "Limbu"),
+	(0x1940, 0x1940, "Limbu"),
+	(0x1944, 0x194f, "Limbu"),
+	(0x1950, 0x196d, "Tai_Le"),
+	(0x1970, 0x1974, "Tai_Le"),
+	(0x1980, 0x19ab, "New_Tai_Lue"),
+	(0x19b0, 0x19c9, "New_Tai_Lue"),
+	(0x19d0, 0x19da, "New_Tai_Lue"),
+	(0x19de, 0x19df, "New_Tai_Lue"),
+	(0x19e0, 0x19ff, "Khmer"),
+	(0x1a00, 0x1a1b, "Buginese"),
+	(0x1a1e, 0x1a1f, "Buginese"),
+	(0x1a20, 0x1a5e, "Tai_Tham"),
+	(0x1a60, 0x1a7c, "Tai_Tham"),
+	(0x1a7f, 0x1a89, "Tai_Tham"),
+	(0x1a90, 0x1a99, "Tai_Tham"),
+	(0x1aa0, 0x1aad, "Tai_Tham"),
+	(0x1ab0, 0x1ace, "Inherited"),
+	(0x1b00, 0x1b4c, "Balinese"),
+	(0x1b50, 0x1b7e, "Balinese"),
+	(0x1b80, 0x1bbf, "Sundanese"),
+	(0x1bc0, 0x1bf3, "Batak"),
+	(0x1bfc, 0x1bff, "Batak"),
+	(0x1c00, 0x1c37, "Lepcha"),
+	(0x1c3b, 0x1c49, "Lepcha"),
+	(0x1c4d, 0x1c4f, "Lepcha"),
+	(0x1c50, 0x1c7f, "Ol_Chiki"),
+	(0x1c80, 0x1c88, "Cyrillic"),
+	(0x1c90, 0x1cba, "Georgian"),
+	(0x1cbd, 0x1cbf, "Georgian"),
+	(0x1cc0, 0x1cc7, "Sundanese"),
+	(0x1cd0, 0x1cd2, "Inherited"),
+	(0x1cd3, 0x1cd3, "Common"),
+	(0x1cd4, 0x1ce0, "Inherited"),
+	(0x1ce1, 0x1ce1, "Common"),
+	(0x1ce2, 0x1ce8, "Inherited"),
+	(0x1ce9, 0x1cec, "Common"),
+	(0x1ced, 0x1ced, "Inherited"),
+	(0x1cee, 0x1cf3, "Common"),
+	(0x1cf4, 0x1cf4, "Inherited"),
+	(0x1cf5, 0x1cf7, "Common"),
+	(0x1cf8, 0x1cf9, "Inherited"),
+	(0x1cfa, 0x1cfa, "Common"),
+	(0x1d00, 0x1d25, "Latin"),
+	(0x1d26, 0x1d2a, "Greek"),
+	(0x1d2b, 0x1d2b, "Cyrillic"),
+	(0x1d2c, 0x1d5c, "Latin"),
+	(0x1d5d, 0x1d61, "Greek"),
+	(0x1d62, 0x1d65, "Latin"),
+	(0x1d66, 0x1d6a, "Greek"),
+	(0x1d6b, 0x1d77, "Latin"),
+	(0x1d78, 0x1d78, "Cyrillic"),
+	(0x1d79, 0x1dbe, "Latin"),
+	(0x1dbf, 0x1dbf, "Greek"),
+	(0x1dc0, 0x1dff, "Inherited"),
+	(0x1e00, 0x1eff, "Latin"),
+	(0x1f00, 0x1f15, "Greek"),
+	(0x1f18, 0x1f1d, "Greek"),
+	(0x1f20, 0x1f45, "Greek"),
+	(0x1f48, 0x1f4d, "Greek"),
+	(0x1f50, 0x1f57, "Greek"),
+	(0x1f59, 0x1f59, "Greek"),
+	(0x1f5b, 0x1f5b, "Greek"),
+	(0x1f5d, 0x1f5d, "Greek"),
+	(0x1f5f, 0x1f7d, "Greek"),
+	(0x1f80, 0x1fb4, "Greek"),
+	(0x1fb6, 0x1fc4, "Greek"),
+	(0x1fc6, 0x1fd3, "Greek"),
+	(0x1fd6, 0x1fdb, "Greek"),
+	(0x1fdd, 0x1fef, "Greek"),
+	(0x1ff2, 0x1ff4, "Greek"),
+	(0x1ff6, 0x1ffe, "Greek"),
+	(0x2000, 0x200b, "Common"),
+	(0x200c, 0x200d, "Inherited"),
+	(0x200e, 0x2064, "Common"),
+	(0x2066, 0x2070, "Common"),
+	(0x2071, 0x2071, "Latin"),
+	(0x2074, 0x207e, "Common"),
+	(0x207f, 0x207f, "Latin"),
+	(0x2080, 0x208e, "Common"),
+	(0x2090, 0x209c, "Latin"),
+	(0x20a0, 0x20c0, "Common"),
+	(0x20d0, 0x20f0, "Inherited"),
+	(0x2100, 0x2125, "Common"),
+	(0x2126, 0x2126, "Greek"),
+	(0x2127, 0x2129, "Common"),
+	(0x212a, 0x212b, "Latin"),
+	(0x212c, 0x2131, "Common"),
+	(0x2132, 0x2132, "Latin"),
+	(0x2133, 0x214d, "Common"),
+	(0x214e, 0x214e, "Latin"),
+	(0x214f, 0x215f, "Common"),
+	(0x2160, 0x2188, "Latin"),
+	(0x2189, 0x218b, "Common"),
+	(0x2190, 0x2426, "Common"),
+	(0x2440, 0x244a, "Common"),
+	(0x2460, 0x27ff, "Common"),
+	(0x2800, 0x28ff, "Braille"),
+	(0x2900, 0x2b73, "Common"),
+	(0x2b76, 0x2b95, "Common"),
+	(0x2b97, 0x2bff, "Common"),
+	(0x2c00, 0x2c5f, "Glagolitic"),
+	(0x2c60, 0x2c7f, "Latin"),
+	(0x2c80, 0x2cf3, "Coptic"),
+	(0x2cf9, 0x2cff, "Coptic"),
+	(0x2d00, 0x2d25, "Georgian"),
+	(0x2d27, 0x2d27, "Georgian"),
+	(0x2d2d, 0x2d2d, "Georgian"),
+	(0x2d30, 0x2d67, "Tifinagh"),
+	(0x2d6f, 0x2d70, "Tifinagh"),
+	(0x2d7f, 0x2d7f, "Tifinagh"),
+	(0x2d80, 0x2d96, "Ethiopic"),
+	(0x2da0, 0x2da6, "Ethiopic"),
+	(0x2da8, 0x2dae, "Ethiopic"),
+	(0x2db0, 0x2db6, "Ethiopic"),
+	(0x2db8, 0x2dbe, "Ethiopic"),
+	(0x2dc0, 0x2dc6, "Ethiopic"),
+	(0x2dc8, 0x2dce, "Ethiopic"),
+	(0x2dd0, 0x2dd6, "Ethiopic"),
+	(0x2dd8, 0x2dde, "Ethiopic"),
+	(0x2de0, 0x2dff, "Cyrillic"),
+	(0x2e00, 0x2e5d, "Common"),
+	(0x2e80, 0x2e99, "Han"),
+	(0x2e9b, 0x2ef3, "Han"),
+	(0x2f00, 0x2fd5, "Han"),
+	(0x2ff0, 0x3004, "Common"),
+	(0x3005, 0x3005, "Han"),
+	(0x3006, 0x3006, "Common"),
+	(0x3007, 0x3007, "Han"),
+	(0x3008, 0x3020, "Common"),
+	(0x3021, 0x3029, "Han"),
+	(0x302a, 0x302d, "Inherited"),
+	(0x302e, 0x302f, "Hangul"),
+	(0x3030, 0x3037, "Common"),
+	(0x3038, 0x303b, "Han"),
+	(0x303c, 0x303f, "Common"),
+	(0x3041, 0x3096, "Hiragana"),
+	(0x3099, 0x309a, "Inherited"),
+	(0x309b, 0x309c, "Common"),
+	(0x309d, 0x309f, "Hiragana"),
+	(0x30a0, 0x30a0, "Common"),
+	(0x30a1, 0x30fa, "Katakana"),
+	(0x30fb, 0x30fc, "Common"),
+	(0x30fd, 0x30ff, "Katakana"),
+	(0x3105, 0x312f, "Bopomofo"),
+	(0x3131, 0x318e, "Hangul"),
+	(0x3190, 0x319f, "Common"),
+	(0x31a0, 0x31bf, "Bopomofo"),
+	(0x31c0, 0x31e3, "Common"),
+	(0x31ef, 0x31ef, "Common"),
+	(0x31f0, 0x31ff, "Katakana"),
+	(0x3200, 0x321e, "Hangul"),
+	(0x3220, 0x325f, "Common"),
+	(0x3260, 0x327e, "Hangul"),
+	(0x327f, 0x32cf, "Common"),
+	(0x32d0, 0x32fe, "Katakana"),
+	(0x32ff, 0x32ff, "Common"),
+	(0x3300, 0x3357, "Katakana"),
+	(0x3358, 0x33ff, "Common"),
+	(0x3400, 0x4dbf, "Han"),
+	(0x4dc0, 0x4dff, "Common"),
+	(0x4e00, 0x9fff, "Han"),
+	(0xa000, 0xa48c, "Yi"),
+	(0xa490, 0xa4c6, "Yi"),
+	(0xa4d0, 0xa4ff, "Lisu"),
+	(0xa500, 0xa62b, "Vai"),
+	(0xa640, 0xa69f, "Cyrillic"),
+	(0xa6a0, 0xa6f7, "Bamum"),
+	(0xa700, 0xa721, "Common"),
+	(0xa722, 0xa787, "Latin"),
+	(0xa788, 0xa78a, "Common"),
+	(0xa78b, 0xa7ca, "Latin"),
+	(0xa7d0, 0xa7d1, "Latin"),
+	(0xa7d3, 0xa7d3, "Latin"),
+	(0xa7d5, 0xa7d9, "Latin"),
+	(0xa7f2, 0xa7ff, "Latin"),
+	(0xa800, 0xa82c, "Syloti_Nagri"),
+	(0xa830, 0xa839, "Common"),
+	(0xa840, 0xa877, "Phags_Pa"),
+	(0xa880, 0xa8c5, "Saurashtra"),
+	(0xa8ce, 0xa8d9, "Saurashtra"),
+	(0xa8e0, 0xa8ff, "Devanagari"),
+	(0xa900, 0xa92d, "Kayah_Li"),
+	(0xa92e, 0xa92e, "Common"),
+	(0xa92f, 0xa92f, "Kayah_Li"),
+	(0xa930, 0xa953, "Rejang"),
+	(0xa95f, 0xa95f, "Rejang"),
+	(0xa960, 0xa97c, "Hangul"),
+	(0xa980, 0xa9cd, "Javanese"),
+	(0xa9cf, 0xa9cf, "Common"),
+	(0xa9d0, 0xa9d9, "Javanese"),
+	(0xa9de, 0xa9df, "Javanese"),
+	(0xa9e0, 0xa9fe, "Myanmar"),
+	(0xaa00, 0xaa36, "Cham"),
+	(0xaa40, 0xaa4d, "Cham"),
+	(0xaa50, 0xaa59, "Cham"),
+	(0xaa5c, 0xaa5f, "Cham"),
+	(0xaa60, 0xaa7f, "Myanmar"),
+	(0xaa80, 0xaac2, "Tai_Viet"),
+	(0xaadb, 0xaadf, "Tai_Viet"),
+	(0xaae0, 0xaaf6, "Meetei_Mayek"),
+	(0xab01, 0xab06, "Ethiopic"),
+	(0xab09, 0xab0e, "Ethiopic"),
+	(0xab11, 0xab16, "Ethiopic"),
+	(0xab20, 0xab26, "Ethiopic"),
+	(0xab28, 0xab2e, "Ethiopic"),
+	(0xab30, 0xab5a, "Latin"),
+	(0xab5b, 0xab5b, "Common"),
+	(0xab5c, 0xab64, "Latin"),
+	(0xab65, 0xab65, "Greek"),
+	(0xab66, 0xab69, "Latin"),
+	(0xab6a, 0xab6b, "Common"),
+	(0xab70, 0xabbf, "Cherokee"),
+	(0xabc0, 0xabed, "Meetei_Mayek"),
+	(0xabf0, 0xabf9, "Meetei_Mayek"),
+	(0xac00, 0xd7a3, "Hangul"),
+	(0xd7b0, 0xd7c6, "Hangul"),
+	(0xd7cb, 0xd7fb, "Hangul"),
+	(0xf900, 0xfa6d, "Han"),
+	(0xfa70, 0xfad9, "Han"),
+	(0xfb00, 0xfb06, "Latin"),
+	(0xfb13, 0xfb17, "Armenian"),
+	(0xfb1d, 0xfb36, "Hebrew"),
+	(0xfb38, 0xfb3c, "Hebrew"),
+	(0xfb3e, 0xfb3e, "Hebrew"),
+	(0xfb40, 0xfb41, "Hebrew"),
+	(0xfb43, 0xfb44, "Hebrew"),
+	(0xfb46, 0xfb4f, "Hebrew"),
+	(0xfb50, 0xfbc2, "Arabic"),
+	(0xfbd3, 0xfd3d, "Arabic"),
+	(0xfd3e, 0xfd3f, "Common"),
+	(0xfd40, 0xfd8f, "Arabic"),
+	(0xfd92, 0xfdc7, "Arabic"),
+	(0xfdcf, 0xfdcf, "Arabic"),
+	(0xfdf0, 0xfdff, "Arabic"),
+	(0xfe00, 0xfe0f, "Inherited"),
+	(0xfe10, 0xfe19, "Common"),
+	(0xfe20, 0xfe2d, "Inherited"),
+	(0xfe2e, 0xfe2f, "Cyrillic"),
+	(0xfe30, 0xfe52, "Common"),
+	(0xfe54, 0xfe66, "Common"),
+	(0xfe68, 0xfe6b, "Common"),
+	(0xfe70, 0xfe74, "Arabic"),
+	(0xfe76, 0xfefc, "Arabic"),
+	(0xfeff, 0xfeff, "Common"),
+	(0xff01, 0xff20, "Common"),
+	(0xff21, 0xff3a, "Latin"),
+	(0xff3b, 0xff40, "Common"),
+	(0xff41, 0xff5a, "Latin"),
+	(0xff5b, 0xff65, "Common"),
+	(0xff66, 0xff6f, "Katakana"),
+	(0xff70, 0xff70, "Common"),
+	(0xff71, 0xff9d, "Katakana"),
+	(0xff9e, 0xff9f, "Common"),
+	(0xffa0, 0xffbe, "Hangul"),
+	(0xffc2, 0xffc7, "Hangul"),
+	(0xffca, 0xffcf, "Hangul"),
+	(0xffd2, 0xffd7, "Hangul"),
+	(0xffda, 0xffdc, "Hangul"),
+	(0xffe0, 0xffe6, "Common"),
+	(0xffe8, 0xffee, "Common"),
+	(0xfff9, 0xfffd, "Common"),
+	(0x10000, 0x1000b, "Linear_B"),
+	(0x1000d, 0x10026, "Linear_B"),
+	(0x10028, 0x1003a, "Linear_B"),
+	(0x1003c, 0x1003d, "Linear_B"),
+	(0x1003f, 0x1004d, "Linear_B"),
+	(0x10050, 0x1005d, "Linear_B"),
+	(0x10080, 0x100fa, "Linear_B"),
+	(0x10100, 0x10102, "Common"),
+	(0x10107, 0x10133, "Common"),
+	(0x10137, 0x1013f, "Common"),
+	(0x10140, 0x1018e, "Greek"),
+	(0x10190, 0x1019c, "Common"),
+	(0x101a0, 0x101a0, "Greek"),
+	(0x101d0, 0x101fc, "Common"),
+	(0x101fd, 0x101fd, "Inherited"),
+	(0x10280, 0x1029c, "Lycian"),
+	(0x102a0, 0x102d0, "Carian"),
+	(0x102e0, 0x102e0, "Inherited"),
+	(0x102e1, 0x102fb, "Common"),
+	(0x10300, 0x10323, "Old_Italic"),
+	(0x1032d, 0x1032f, "Old_Italic"),
+	(0x10330, 0x1034a, "Gothic"),
+	(0x10350, 0x1037a, "Old_Permic"),
+	(0x10380, 0x1039d, "Ugaritic"),
+	(0x1039f, 0x1039f, "Ugaritic"),
+	(0x103a0, 0x103c3, "Old_Persian"),
+	(0x103c8, 0x103d5, "Old_Persian"),
+	(0x10400, 0x1044f, "Deseret"),
+	(0x10450, 0x1047f, "Shavian"),
+	(0x10480, 0x1049d, "Osmanya"),
+	(0x104a0, 0x104a9, "Osmanya"),
+	(0x104b0, 0x104d3, "Osage"),
+	(0x104d8, 0x104fb, "Osage"),
+	(0x10500, 0x10527, "Elbasan"),
+	(0x10530, 0x10563, "Caucasian_Albanian"),
+	(0x1056f, 0x1056f, "Caucasian_Albanian"),
+	(0x10570, 0x1057a, "Vithkuqi"),
+	(0x1057c, 0x1058a, "Vithkuqi"),
+	(0x1058c, 0x10592, "Vithkuqi"),
+	(0x10594, 0x10595, "Vithkuqi"),
+	(0x10597, 0x105a1, "Vithkuqi"),
+	(0x105a3, 0x105b1, "Vithkuqi"),
+	(0x105b3, 0x105b9, "Vithkuqi"),
+	(0x105bb, 0x105bc, "Vithkuqi"),
+	(0x10600, 0x10736, "Linear_A"),
+	(0x10740, 0x10755, "Linear_A"),
+	(0x10760, 0x10767, "Linear_A"),
+	(0x10780, 0x10785, "Latin"),
+	(0x10787, 0x107b0, "Latin"),
+	(0x107b2, 0x107ba, "Latin"),
+	(0x10800, 0x10805, "Cypriot"),
+	(0x10808, 0x10808, "Cypriot"),
+	(0x1080a, 0x10835, "Cypriot"),
+	(0x10837, 0x10838, "Cypriot"),
+	(0x1083c, 0x1083c, "Cypriot"),
+	(0x1083f, 0x1083f, "Cypriot"),
+	(0x10840, 0x10855, "Imperial_Aramaic"),
+	(0x10857, 0x1085f, "Imperial_Aramaic"),
+	(0x10860, 0x1087f, "Palmyrene"),
+	(0x10880, 0x1089e, "Nabataean"),
+	(0x108a7, 0x108af, "Nabataean"),
+	(0x108e0, 0x108f2, "Hatran"),
+	(0x108f4, 0x108f5, "Hatran"),
+	(0x108fb, 0x108ff, "Hatran"),
+	(0x10900, 0x1091b, "Phoenician"),
+	(0x1091f, 0x1091f, "Phoenician"),
+	(0x10920, 0x10939, "Lydian"),
+	(0x1093f, 0x1093f, "Lydian"),
+	(0x10980, 0x1099f, "Meroitic_Hieroglyphs"),
+	(0x109a0, 0x109b7, "Meroitic_Cursive"),
+	(0x109bc, 0x109cf, "Meroitic_Cursive"),
+	(0x109d2, 0x109ff, "Meroitic_Cursive"),
+	(0x10a00, 0x10a03, "Kharoshthi"),
+	(0x10a05, 0x10a06, "Kharoshthi"),
+	(0x10a0c, 0x10a13, "Kharoshthi"),
+	(0x10a15, 0x10a17, "Kharoshthi"),
+	(0x10a19, 0x10a35, "Kharoshthi"),
+	(0x10a38, 0x10a3a, "Kharoshthi"),
+	(0x10a3f, 0x10a48, "Kharoshthi"),
+	(0x10a50, 0x10a58, "Kharoshthi"),
+	(0x10a60, 0x10a7f, "Old_South_Arabian"),
+	(0x10a80, 0x10a9f, "Old_North_Arabian"),
+	(0x10ac0, 0x10ae6, "Manichaean"),
+	(0x10aeb, 0x10af6, "Manichaean"),
+	(0x10b00, 0x10b35, "Avestan"),
+	(0x10b39, 0x10b3f, "Avestan"),
+	(0x10b40, 0x10b55, "Inscriptional_Parthian"),
+	(0x10b58, 0x10b5f, "Inscriptional_Parthian"),
+	(0x10b60, 0x10b72, "Inscriptional_Pahlavi"),
+	(0x10b78, 0x10b7f, "Inscriptional_Pahlavi"),
+	(0x10b80, 0x10b91, "Psalter_Pahlavi"),
+	(0x10b99, 0x10b9c, "Psalter_Pahlavi"),
+	(0x10ba9, 0x10baf, "Psalter_Pahlavi"),
+	(0x10c00, 0x10c48, "Old_Turkic"),
+	(0x10c80, 0x10cb2, "Old_Hungarian"),
+	(0x10cc0, 0x10cf2, "Old_Hungarian"),
+	(0x10cfa, 0x10cff, "Old_Hungarian"),
+	(0x10d00, 0x10d27, "Hanifi_Rohingya"),
+	(0x10d30, 0x10d39, "Hanifi_Rohingya"),
+	(0x10e60, 0x10e7e, "Arabic"),
+	(0x10e80, 0x10ea9, "Yezidi"),
+	(0x10eab, 0x10ead, "Yezidi"),
+	(0x10eb0, 0x10eb1, "Yezidi"),
+	(0x10efd, 0x10eff, "Arabic"),
+	(0x10f00, 0x10f27, "Old_Sogdian"),
+	(0x10f30, 0x10f59, "Sogdian"),
+	(0x10f70, 0x10f89, "Old_Uyghur"),
+	(0x10fb0, 0x10fcb, "Chorasmian"),
+	(0x10fe0, 0x10ff6, "Elymaic"),
+	(0x11000, 0x1104d, "Brahmi"),
+	(0x11052, 0x11075, "Brahmi"),
+	(0x1107f, 0x1107f, "Brahmi"),
+	(0x11080, 0x110c2, "Kaithi"),
+	(0x110cd, 0x110cd, "Kaithi"),
+	(0x110d0, 0x110e8, "Sora_Sompeng"),
+	(0x110f0, 0x110f9, "Sora_Sompeng"),
+	(0x11100, 0x11134, "Chakma"),
+	(0x11136, 0x11147, "Chakma"),
+	(0x11150, 0x11176, "Mahajani"),
+	(0x11180, 0x111df, "Sharada"),
+	(0x111e1, 0x111f4, "Sinhala"),
+	(0x11200, 0x11211, "Khojki"),
+	(0x11213, 0x11241, "Khojki"),
+	(0x11280, 0x11286, "Multani"),
+	(0x11288, 0x11288, "Multani"),
+	(0x1128a, 0x1128d, "Multani"),
+	(0x1128f, 0x1129d, "Multani"),
+	(0x1129f, 0x112a9, "Multani"),
+	(0x112b0, 0x112ea, "Khudawadi"),
+	(0x112f0, 0x112f9, "Khudawadi"),
+	(0x11300, 0x11303, "Grantha"),
+	(0x11305, 0x1130c, "Grantha"),
+	(0x1130f, 0x11310, "Grantha"),
+	(0x11313, 0x11328, "Grantha"),
+	(0x1132a, 0x11330, "Grantha"),
+	(0x11332, 0x11333, "Grantha"),
+	(0x11335, 0x11339, "Grantha"),
+	(0x1133b, 0x1133b, "Inherited"),
+	(0x1133c, 0x11344, "Grantha"),
+	(0x11347, 0x11348, "Grantha"),
+	(0x1134b, 0x1134d, "Grantha"),
+	(0x11350, 0x11350, "Grantha"),
+	(0x11357, 0x11357, "Grantha"),
+	(0x1135d, 0x11363, "Grantha"),
+	(0x11366, 0x1136c, "Grantha"),
+	(0x11370, 0x11374, "Grantha"),
+	(0x11400, 0x1145b, "Newa"),
+	(0x1145d, 0x11461, "Newa"),
+	(0x11480, 0x114c7, "Tirhuta"),
+	(0x114d0, 0x114d9, "Tirhuta"),
+	(0x11580, 0x115b5, "Siddham"),
+	(0x115b8, 0x115dd, "Siddham"),
+	(0x11600, 0x11644, "Modi"),
+	(0x11650, 0x11659, "Modi"),
+	(0x11660, 0x1166c, "Mongolian"),
+	(0x11680, 0x116b9, "Takri"),
+	(0x116c0, 0x116c9, "Takri"),
+	(0x11700, 0x1171a, "Ahom"),
+	(0x1171d, 0x1172b, "Ahom"),
+	(0x11730, 0x11746, "Ahom"),
+	(0x11800, 0x1183b, "Dogra"),
+	(0x118a0, 0x118f2, "Warang_Citi"),
+	(0x118ff, 0x118ff, "Warang_Citi"),
+	(0x11900, 0x11906, "Dives_Akuru"),
+	(0x11909, 0x11909, "Dives_Akuru"),
+	(0x1190c, 0x11913, "Dives_Akuru"),
+	(0x11915, 0x11916, "Dives_Akuru"),
+	(0x11918, 0x11935, "Dives_Akuru"),
+	(0x11937, 0x11938, "Dives_Akuru"),
+	(0x1193b, 0x11946, "Dives_Akuru"),
+	(0x11950, 0x11959, "Dives_Akuru"),
+	(0x119a0, 0x119a7, "Nandinagari"),
+	(0x119aa, 0x119d7, "Nandinagari"),
+	(0x119da, 0x119e4, "Nandinagari"),
+	(0x11a00, 0x11a47, "Zanabazar_Square"),
+	(0x11a50, 0x11aa2, "Soyombo"),
+	(0x11ab0, 0x11abf, "Canadian_Aboriginal"),
+	(0x11ac0, 0x11af8, "Pau_Cin_Hau"),
+	(0x11b00, 0x11b09, "Devanagari"),
+	(0x11c00, 0x11c08, "Bhaiksuki"),
+	(0x11c0a, 0x11c36, "Bhaiksuki"),
+	(0x11c38, 0x11c45, "Bhaiksuki"),
+	(0x11c50, 0x11c6c, "Bhaiksuki"),
+	(0x11c70, 0x11c8f, "Marchen"),
+	(0x11c92, 0x11ca7, "Marchen"),
+	(0x11ca9, 0x11cb6, "Marchen"),
+	(0x11d00, 0x11d06, "Masaram_Gondi"),
+	(0x11d08, 0x11d09, "Masaram_Gondi"),
+	(0x11d0b, 0x11d36, "Masaram_Gondi"),
+	(0x11d3a, 0x11d3a, "Masaram_Gondi"),
+	(0x11d3c, 0x11d3d, "Masaram_Gondi"),
+	(0x11d3f, 0x11d47, "Masaram_Gondi"),
+	(0x11d50, 0x11d59, "Masaram_Gondi"),
+	(0x11d60, 0x11d65, "Gunjala_Gondi"),
+	(0x11d67, 0x11d68, "Gunjala_Gondi"),
+	(0x11d6a, 0x11d8e, "Gunjala_Gondi"),
+	(0x11d90, 0x11d91, "Gunjala_Gondi"),
+	(0x11d93, 0x11d98, "Gunjala_Gondi"),
+	(0x11da0, 0x11da9, "Gunjala_Gondi"),
+	(0x11ee0, 0x11ef8, "Makasar"),
+	(0x11f00, 0x11f10, "Kawi"),
+	(0x11f12, 0x11f3a, "Kawi"),
+	(0x11f3e, 0x11f59, "Kawi"),
+	(0x11fb0, 0x11fb0, "Lisu"),
+	(0x11fc0, 0x11ff1, "Tamil"),
+	(0x11fff, 0x11fff, "Tamil"),
+	(0x12000, 0x12399, "Cuneiform"),
+	(0x12400, 0x1246e, "Cuneiform"),
+	(0x12470, 0x12474, "Cuneiform"),
+	(0x12480, 0x12543, "Cuneiform"),
+	(0x12f90, 0x12ff2, "Cypro_Minoan"),
+	(0x13000, 0x13455, "Egyptian_Hieroglyphs"),
+	(0x14400, 0x14646, "Anatolian_Hieroglyphs"),
+	(0x16800, 0x16a38, "Bamum"),
+	(0x16a40, 0x16a5e, "Mro"),
+	(0x16a60, 0x16a69, "Mro"),
+	(0x16a6e, 0x16a6f, "Mro"),
+	(0x16a70, 0x16abe, "Tangsa"),
+	(0x16ac0, 0x16ac9, "Tangsa"),
+	(0x16ad0, 0x16aed, "Bassa_Vah"),
+	(0x16af0, 0x16af5, "Bassa_Vah"),
+	(0x16b00, 0x16b45, "Pahawh_Hmong"),
+	(0x16b50, 0x16b59, "Pahawh_Hmong"),
+	(0x16b5b, 0x16b61, "Pahawh_Hmong"),
+	(0x16b63, 0x16b77, "Pahawh_Hmong"),
+	(0x16b7d, 0x16b8f, "Pahawh_Hmong"),
+	(0x16e40, 0x16e9a, "Medefaidrin"),
+	(0x16f00, 0x16f4a, "Miao"),
+	(0x16f4f, 0x16f87, "Miao"),
+	(0x16f8f, 0x16f9f, "Miao"),
+	(0x16fe0, 0x16fe0, "Tangut"),
+	(0x16fe1, 0x16fe1, "Nushu"),
+	(0x16fe2, 0x16fe3, "Han"),
+	(0x16fe4, 0x16fe4, "Khitan_Small_Script"),
+	(0x16ff0, 0x16ff1, "Han"),
+	(0x17000, 0x187f7, "Tangut"),
+	(0x18800, 0x18aff, "Tangut"),
+	(0x18b00, 0x18cd5, "Khitan_Small_Script"),
+	(0x18d00, 0x18d08, "Tangut"),
+	(0x1aff0, 0x1aff3, "Katakana"),
+	(0x1aff5, 0x1affb, "Katakana"),
+	(0x1affd, 0x1affe, "Katakana"),
+	(0x1b000, 0x1b000, "Katakana"),
+	(0x1b001, 0x1b11f, "Hiragana"),
+	(0x1b120, 0x1b122, "Katakana"),
+	(0x1b132, 0x1b132, "Hiragana"),
+	(0x1b150, 0x1b152, "Hiragana"),
+	(0x1b155, 0x1b155, "Katakana"),
+	(0x1b164, 0x1b167, "Katakana"),
+	(0x1b170, 0x1b2fb, "Nushu"),
+	(0x1bc00, 0x1bc6a, "Duployan"),
+	(0x1bc70, 0x1bc7c, "Duployan"),
+	(0x1bc80, 0x1bc88, "Duployan"),
+	(0x1bc90, 0x1bc99, "Duployan"),
+	(0x1bc9c, 0x1bc9f, "Duployan"),
+	(0x1bca0, 0x1bca3, "Common"),
+	(0x1cf00, 0x1cf2d, "Inherited"),
+	(0x1cf30, 0x1cf46, "Inherited"),
+	(0x1cf50, 0x1cfc3, "Common"),
+	(0x1d000, 0x1d0f5, "Common"),
+	(0x1d100, 0x1d126, "Common"),
+	(0x1d129, 0x1d166, "Common"),
+	(0x1d167, 0x1d169, "Inherited"),
+	(0x1d16a, 0x1d17a, "Common"),
+	(0x1d17b, 0x1d182, "Inherited"),
+	(0x1d183, 0x1d184, "Common"),
+	(0x1d185, 0x1d18b, "Inherited"),
+	(0x1d18c, 0x1d1a9, "Common"),
+	(0x1d1aa, 0x1d1ad, "Inherited"),
+	(0x1d1ae, 0x1d1ea, "Common"),
+	(0x1d200, 0x1d245, "Greek"),
+	(0x1d2c0, 0x1d2d3, "Common"),
+	(0x1d2e0, 0x1d2f3, "Common"),
+	(0x1d300, 0x1d356, "Common"),
+	(0x1d360, 0x1d378, "Common"),
+	(0x1d400, 0x1d454, "Common"),
+	(0x1d456, 0x1d49c, "Common"),
+	(0x1d49e, 0x1d49f, "Common"),
+	(0x1d4a2, 0x1d4a2, "Common"),
+	(0x1d4a5, 0x1d4a6, "Common"),
+	(0x1d4a9, 0x1d4ac, "Common"),
+	(0x1d4ae, 0x1d4b9, "Common"),
+	(0x1d4bb, 0x1d4bb, "Common"),
+	(0x1d4bd, 0x1d4c3, "Common"),
+	(0x1d4c5, 0x1d505, "Common"),
+	(0x1d507, 0x1d50a, "Common"),
+	(0x1d50d, 0x1d514, "Common"),
+	(0x1d516, 0x1d51c, "Common"),
+	(0x1d51e, 0x1d539, "Common"),
+	(0x1d53b, 0x1d53e, "Common"),
+	(0x1d540, 0x1d544, "Common"),
+	(0x1d546, 0x1d546, "Common"),
+	(0x1d54a, 0x1d550, "Common"),
+	(0x1d552, 0x1d6a5, "Common"),
+	(0x1d6a8, 0x1d7cb, "Common"),
+	(0x1d7ce, 0x1d7ff, "Common"),
+	(0x1d800, 0x1da8b, "SignWriting"),
+	(0x1da9b, 0x1da9f, "SignWriting"),
+	(0x1daa1, 0x1daaf, "SignWriting"),
+	(0x1df00, 0x1df1e, "Latin"),
+	(0x1df25, 0x1df2a, "Latin"),
+	(0x1e000, 0x1e006, "Glagolitic"),
+	(0x1e008, 0x1e018, "Glagolitic"),
+	(0x1e01b, 0x1e021, "Glagolitic"),
+	(0x1e023, 0x1e024, "Glagolitic"),
+	(0x1e026, 0x1e02a, "Glagolitic"),
+	(0x1e030, 0x1e06d, "Cyrillic"),
+	(0x1e08f, 0x1e08f, "Cyrillic"),
+	(0x1e100, 0x1e12c, "Nyiakeng_Puachue_Hmong"),
+	(0x1e130, 0x1e13d, "Nyiakeng_Puachue_Hmong"),
+	(0x1e140, 0x1e149, "Nyiakeng_Puachue_Hmong"),
+	(0x1e14e, 0x1e14f, "Nyiakeng_Puachue_Hmong"),
+	(0x1e290, 0x1e2ae, "Toto"),
+	(0x1e2c0, 0x1e2f9, "Wancho"),
+	(0x1e2ff, 0x1e2ff, "Wancho"),
+	(0x1e4d0, 0x1e4f9, "Nag_Mundari"),
+	(0x1e7e0, 0x1e7e6, "Ethiopic"),
+	(0x1e7e8, 0x1e7eb, "Ethiopic"),
+	(0x1e7ed, 0x1e7ee, "Ethiopic"),
+	(0x1e7f0, 0x1e7fe, "Ethiopic"),
+	(0x1e800, 0x1e8c4, "Mende_Kikakui"),
+	(0x1e8c7, 0x1e8d6, "Mende_Kikakui"),
+	(0x1e900, 0x1e94b, "Adlam"),
+	(0x1e950, 0x1e959, "Adlam"),
+	(0x1e95e, 0x1e95f, "Adlam"),
+	(0x1ec71, 0x1ecb4, "Common"),
+	(0x1ed01, 0x1ed3d, "Common"),
+	(0x1ee00, 0x1ee03, "Arabic"),
+	(0x1ee05, 0x1ee1f, "Arabic"),
+	(0x1ee21, 0x1ee22, "Arabic"),
+	(0x1ee24, 0x1ee24, "Arabic"),
+	(0x1ee27, 0x1ee27, "Arabic"),
+	(0x1ee29, 0x1ee32, "Arabic"),
+	(0x1ee34, 0x1ee37, "Arabic"),
+	(0x1ee39, 0x1ee39, "Arabic"),
+	(0x1ee3b, 0x1ee3b, "Arabic"),
+	(0x1ee42, 0x1ee42, "Arabic"),
+	(0x1ee47, 0x1ee47, "Arabic"),
+	(0x1ee49, 0x1ee49, "Arabic"),
+	(0x1ee4b, 0x1ee4b, "Arabic"),
+	(0x1ee4d, 0x1ee4f, "Arabic"),
+	(0x1ee51, 0x1ee52, "Arabic"),
+	(0x1ee54, 0x1ee54, "Arabic"),
+	(0x1ee57, 0x1ee57, "Arabic"),
+	(0x1ee59, 0x1ee59, "Arabic"),
+	(0x1ee5b, 0x1ee5b, "Arabic"),
+	(0x1ee5d, 0x1ee5d, "Arabic"),
+	(0x1ee5f, 0x1ee5f, "Arabic"),
+	(0x1ee61, 0x1ee62, "Arabic"),
+	(0x1ee64, 0x1ee64, "Arabic"),
+	(0x1ee67, 0x1ee6a, "Arabic"),
+	(0x1ee6c, 0x1ee72, "Arabic"),
+	(0x1ee74, 0x1ee77, "Arabic"),
+	(0x1ee79, 0x1ee7c, "Arabic"),
+	(0x1ee7e, 0x1ee7e, "Arabic"),
+	(0x1ee80, 0x1ee89, "Arabic"),
+	(0x1ee8b, 0x1ee9b, "Arabic"),
+	(0x1eea1, 0x1eea3, "Arabic"),
+	(0x1eea5, 0x1eea9, "Arabic"),
+	(0x1eeab, 0x1eebb, "Arabic"),
+	(0x1eef0, 0x1eef1, "Arabic"),
+	(0x1f000, 0x1f02b, "Common"),
+	(0x1f030, 0x1f093, "Common"),
+	(0x1f0a0, 0x1f0ae, "Common"),
+	(0x1f0b1, 0x1f0bf, "Common"),
+	(0x1f0c1, 0x1f0cf, "Common"),
+	(0x1f0d1, 0x1f0f5, "Common"),
+	(0x1f100, 0x1f1ad, "Common"),
+	(0x1f1e6, 0x1f1ff, "Common"),
+	(0x1f200, 0x1f200, "Hiragana"),
+	(0x1f201, 0x1f202, "Common"),
+	(0x1f210, 0x1f23b, "Common"),
+	(0x1f240, 0x1f248, "Common"),
+	(0x1f250, 0x1f251, "Common"),
+	(0x1f260, 0x1f265, "Common"),
+	(0x1f300, 0x1f6d7, "Common"),
+	(0x1f6dc, 0x1f6ec, "Common"),
+	(0x1f6f0, 0x1f6fc, "Common"),
+	(0x1f700, 0x1f776, "Common"),
+	(0x1f77b, 0x1f7d9, "Common"),
+	(0x1f7e0, 0x1f7eb, "Common"),
+	(0x1f7f0, 0x1f7f0, "Common"),
+	(0x1f800, 0x1f80b, "Common"),
+	(0x1f810, 0x1f847, "Common"),
+	(0x1f850, 0x1f859, "Common"),
+	(0x1f860, 0x1f887, "Common"),
+	(0x1f890, 0x1f8ad, "Common"),
+	(0x1f8b0, 0x1f8b1, "Common"),
+	(0x1f900, 0x1fa53, "Common"),
+	(0x1fa60, 0x1fa6d, "Common"),
+	(0x1fa70, 0x1fa7c, "Common"),
+	(0x1fa80, 0x1fa88, "Common"),
+	(0x1fa90, 0x1fabd, "Common"),
+	(0x1fabf, 0x1fac5, "Common"),
+	(0x1face, 0x1fadb, "Common"),
+	(0x1fae0, 0x1fae8, "Common"),
+	(0x1faf0, 0x1faf8, "Common"),
+	(0x1fb00, 0x1fb92, "Common"),
+	(0x1fb94, 0x1fbca, "Common"),
+	(0x1fbf0, 0x1fbf9, "Common"),
+	(0x20000, 0x2a6df, "Han"),
+	(0x2a700, 0x2b739, "Han"),
+	(0x2b740, 0x2b81d, "Han"),
+	(0x2b820, 0x2cea1, "Han"),
+	(0x2ceb0, 0x2ebe0, "Han"),
+	(0x2ebf0, 0x2ee5d, "Han"),
+	(0x2f800, 0x2fa1d, "Han"),
+	(0x30000, 0x3134a, "Han"),
+	(0x31350, 0x323af, "Han"),
+	(0xe0001, 0xe0001, "Common"),
+	(0xe0020, 0xe007f, "Common"),
+	(0xe0100, 0xe01ef, "Inherited"),
+)
+
+_STARTS = tuple(first for first, _last, _name in _RANGES)
 
 
-SCRIPTS = {}
-
-SCRIPTS.update(dict.fromkeys(range(0x0, 0x41), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x5b, 0x61), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x7b, 0xaa), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xab, 0xba), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xbb, 0xc0), "Common"))
-SCRIPTS[0xd7] = "Common"
-SCRIPTS[0xf7] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x2b9, 0x2e0), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2e5, 0x2ea), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2ec, 0x300), "Common"))
-SCRIPTS[0x374] = "Common"
-SCRIPTS[0x37e] = "Common"
-SCRIPTS[0x385] = "Common"
-SCRIPTS[0x387] = "Common"
-SCRIPTS[0x605] = "Common"
-SCRIPTS[0x60c] = "Common"
-SCRIPTS[0x61b] = "Common"
-SCRIPTS[0x61f] = "Common"
-SCRIPTS[0x640] = "Common"
-SCRIPTS[0x6dd] = "Common"
-SCRIPTS[0x8e2] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x964, 0x966), "Common"))
-SCRIPTS[0xe3f] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0xfd5, 0xfd9), "Common"))
-SCRIPTS[0x10fb] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x16eb, 0x16ee), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1735, 0x1737), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1802, 0x1804), "Common"))
-SCRIPTS[0x1805] = "Common"
-SCRIPTS[0x1cd3] = "Common"
-SCRIPTS[0x1ce1] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x1ce9, 0x1ced), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1cee, 0x1cf4), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1cf5, 0x1cf8), "Common"))
-SCRIPTS[0x1cfa] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x2000, 0x200c), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x200e, 0x2065), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2066, 0x2071), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2074, 0x207f), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2080, 0x208f), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x20a0, 0x20c1), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2100, 0x2126), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2127, 0x212a), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x212c, 0x2132), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2133, 0x214e), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x214f, 0x2160), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2189, 0x218c), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2190, 0x2427), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2440, 0x244b), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2460, 0x2800), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2900, 0x2b74), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2b76, 0x2b96), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2b97, 0x2c00), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2e00, 0x2e5e), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x2ff0, 0x3005), "Common"))
-SCRIPTS[0x3006] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x3008, 0x3021), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x3030, 0x3038), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x303c, 0x3040), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x309b, 0x309d), "Common"))
-SCRIPTS[0x30a0] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x30fb, 0x30fd), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x3190, 0x31a0), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x31c0, 0x31e4), "Common"))
-SCRIPTS[0x31ef] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x3220, 0x3260), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x327f, 0x32d0), "Common"))
-SCRIPTS[0x32ff] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x3358, 0x3400), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x4dc0, 0x4e00), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xa700, 0xa722), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xa788, 0xa78b), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xa830, 0xa83a), "Common"))
-SCRIPTS[0xa92e] = "Common"
-SCRIPTS[0xa9cf] = "Common"
-SCRIPTS[0xab5b] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0xab6a, 0xab6c), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xfd3e, 0xfd40), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xfe10, 0xfe1a), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xfe30, 0xfe53), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xfe54, 0xfe67), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xfe68, 0xfe6c), "Common"))
-SCRIPTS[0xfeff] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0xff01, 0xff21), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xff3b, 0xff41), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xff5b, 0xff66), "Common"))
-SCRIPTS[0xff70] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0xff9e, 0xffa0), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xffe0, 0xffe7), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xffe8, 0xffef), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0xfff9, 0xfffe), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x10100, 0x10103), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x10107, 0x10134), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x10137, 0x10140), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x10190, 0x1019d), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x101d0, 0x101fd), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x102e1, 0x102fc), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1bca0, 0x1bca4), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1cf50, 0x1cfc4), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d000, 0x1d0f6), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d100, 0x1d127), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d129, 0x1d167), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d16a, 0x1d17b), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d183, 0x1d185), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d18c, 0x1d1aa), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d1ae, 0x1d1eb), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d2c0, 0x1d2d4), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d2e0, 0x1d2f4), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d300, 0x1d357), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d360, 0x1d379), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d400, 0x1d455), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d456, 0x1d49d), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d49e, 0x1d4a0), "Common"))
-SCRIPTS[0x1d4a2] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x1d4a5, 0x1d4a7), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d4a9, 0x1d4ad), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d4ae, 0x1d4ba), "Common"))
-SCRIPTS[0x1d4bb] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x1d4bd, 0x1d4c4), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d4c5, 0x1d506), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d507, 0x1d50b), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d50d, 0x1d515), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d516, 0x1d51d), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d51e, 0x1d53a), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d53b, 0x1d53f), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d540, 0x1d545), "Common"))
-SCRIPTS[0x1d546] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x1d54a, 0x1d551), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d552, 0x1d6a6), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d6a8, 0x1d7cc), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1d7ce, 0x1d800), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1ec71, 0x1ecb5), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1ed01, 0x1ed3e), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f000, 0x1f02c), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f030, 0x1f094), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f0a0, 0x1f0af), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f0b1, 0x1f0c0), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f0c1, 0x1f0d0), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f0d1, 0x1f0f6), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f100, 0x1f1ae), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f1e6, 0x1f200), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f201, 0x1f203), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f210, 0x1f23c), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f240, 0x1f249), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f250, 0x1f252), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f260, 0x1f266), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f300, 0x1f6d8), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f6dc, 0x1f6ed), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f6f0, 0x1f6fd), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f700, 0x1f777), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f77b, 0x1f7da), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f7e0, 0x1f7ec), "Common"))
-SCRIPTS[0x1f7f0] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0x1f800, 0x1f80c), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f810, 0x1f848), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f850, 0x1f85a), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f860, 0x1f888), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f890, 0x1f8ae), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f8b0, 0x1f8b2), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1f900, 0x1fa54), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1fa60, 0x1fa6e), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1fa70, 0x1fa7d), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1fa80, 0x1fa89), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1fa90, 0x1fabe), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1fabf, 0x1fac6), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1face, 0x1fadc), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1fae0, 0x1fae9), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1faf0, 0x1faf9), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1fb00, 0x1fb93), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1fb94, 0x1fbcb), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x1fbf0, 0x1fbfa), "Common"))
-SCRIPTS[0xe0001] = "Common"
-SCRIPTS.update(dict.fromkeys(range(0xe0020, 0xe0080), "Common"))
-SCRIPTS.update(dict.fromkeys(range(0x41, 0x5b), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x61, 0x7b), "Latin"))
-SCRIPTS[0xaa] = "Latin"
-SCRIPTS[0xba] = "Latin"
-SCRIPTS.update(dict.fromkeys(range(0xc0, 0xd7), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0xd8, 0xf7), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0xf8, 0x2b9), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x2e0, 0x2e5), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x1d00, 0x1d26), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x1d2c, 0x1d5d), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x1d62, 0x1d66), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x1d6b, 0x1d78), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x1d79, 0x1dbf), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x1e00, 0x1f00), "Latin"))
-SCRIPTS[0x2071] = "Latin"
-SCRIPTS[0x207f] = "Latin"
-SCRIPTS.update(dict.fromkeys(range(0x2090, 0x209d), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x212a, 0x212c), "Latin"))
-SCRIPTS[0x2132] = "Latin"
-SCRIPTS[0x214e] = "Latin"
-SCRIPTS.update(dict.fromkeys(range(0x2160, 0x2189), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x2c60, 0x2c80), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0xa722, 0xa788), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0xa78b, 0xa7cb), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0xa7d0, 0xa7d2), "Latin"))
-SCRIPTS[0xa7d3] = "Latin"
-SCRIPTS.update(dict.fromkeys(range(0xa7d5, 0xa7da), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0xa7f2, 0xa800), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0xab30, 0xab5b), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0xab5c, 0xab65), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0xab66, 0xab6a), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0xfb00, 0xfb07), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0xff21, 0xff3b), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0xff41, 0xff5b), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x10780, 0x10786), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x10787, 0x107b1), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x107b2, 0x107bb), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x1df00, 0x1df1f), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x1df25, 0x1df2b), "Latin"))
-SCRIPTS.update(dict.fromkeys(range(0x370, 0x374), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x375, 0x378), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x37a, 0x37e), "Greek"))
-SCRIPTS[0x37f] = "Greek"
-SCRIPTS[0x384] = "Greek"
-SCRIPTS[0x386] = "Greek"
-SCRIPTS.update(dict.fromkeys(range(0x388, 0x38b), "Greek"))
-SCRIPTS[0x38c] = "Greek"
-SCRIPTS.update(dict.fromkeys(range(0x38e, 0x3a2), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x3a3, 0x3e2), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x3f0, 0x400), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1d26, 0x1d2b), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1d5d, 0x1d62), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1d66, 0x1d6b), "Greek"))
-SCRIPTS[0x1dbf] = "Greek"
-SCRIPTS.update(dict.fromkeys(range(0x1f00, 0x1f16), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1f18, 0x1f1e), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1f20, 0x1f46), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1f48, 0x1f4e), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1f50, 0x1f58), "Greek"))
-SCRIPTS[0x1f59] = "Greek"
-SCRIPTS[0x1f5b] = "Greek"
-SCRIPTS[0x1f5d] = "Greek"
-SCRIPTS.update(dict.fromkeys(range(0x1f5f, 0x1f7e), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1f80, 0x1fb5), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1fb6, 0x1fc5), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1fc6, 0x1fd4), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1fd6, 0x1fdc), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1fdd, 0x1ff0), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1ff2, 0x1ff5), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x1ff6, 0x1fff), "Greek"))
-SCRIPTS[0x2126] = "Greek"
-SCRIPTS[0xab65] = "Greek"
-SCRIPTS.update(dict.fromkeys(range(0x10140, 0x1018f), "Greek"))
-SCRIPTS[0x101a0] = "Greek"
-SCRIPTS.update(dict.fromkeys(range(0x1d200, 0x1d246), "Greek"))
-SCRIPTS.update(dict.fromkeys(range(0x400, 0x485), "Cyrillic"))
-SCRIPTS.update(dict.fromkeys(range(0x487, 0x530), "Cyrillic"))
-SCRIPTS.update(dict.fromkeys(range(0x1c80, 0x1c89), "Cyrillic"))
-SCRIPTS[0x1d2b] = "Cyrillic"
-SCRIPTS[0x1d78] = "Cyrillic"
-SCRIPTS.update(dict.fromkeys(range(0x2de0, 0x2e00), "Cyrillic"))
-SCRIPTS.update(dict.fromkeys(range(0xa640, 0xa6a0), "Cyrillic"))
-SCRIPTS.update(dict.fromkeys(range(0xfe2e, 0xfe30), "Cyrillic"))
-SCRIPTS.update(dict.fromkeys(range(0x1e030, 0x1e06e), "Cyrillic"))
-SCRIPTS[0x1e08f] = "Cyrillic"
-SCRIPTS.update(dict.fromkeys(range(0x531, 0x557), "Armenian"))
-SCRIPTS.update(dict.fromkeys(range(0x559, 0x58b), "Armenian"))
-SCRIPTS.update(dict.fromkeys(range(0x58d, 0x590), "Armenian"))
-SCRIPTS.update(dict.fromkeys(range(0xfb13, 0xfb18), "Armenian"))
-SCRIPTS.update(dict.fromkeys(range(0x591, 0x5c8), "Hebrew"))
-SCRIPTS.update(dict.fromkeys(range(0x5d0, 0x5eb), "Hebrew"))
-SCRIPTS.update(dict.fromkeys(range(0x5ef, 0x5f5), "Hebrew"))
-SCRIPTS.update(dict.fromkeys(range(0xfb1d, 0xfb37), "Hebrew"))
-SCRIPTS.update(dict.fromkeys(range(0xfb38, 0xfb3d), "Hebrew"))
-SCRIPTS[0xfb3e] = "Hebrew"
-SCRIPTS.update(dict.fromkeys(range(0xfb40, 0xfb42), "Hebrew"))
-SCRIPTS.update(dict.fromkeys(range(0xfb43, 0xfb45), "Hebrew"))
-SCRIPTS.update(dict.fromkeys(range(0xfb46, 0xfb50), "Hebrew"))
-SCRIPTS.update(dict.fromkeys(range(0x600, 0x605), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x606, 0x60c), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x60d, 0x61b), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x61c, 0x61f), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x620, 0x640), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x641, 0x670), "Arabic"))  # Includes 0x64B-0x655 Tashkeel/Harakat
-SCRIPTS.update(dict.fromkeys(range(0x671, 0x6dd), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x6de, 0x700), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x750, 0x780), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x870, 0x88f), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x890, 0x892), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x898, 0x8e2), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x8e3, 0x900), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0xfb50, 0xfbc3), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0xfbd3, 0xfd3e), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0xfd40, 0xfd90), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0xfd92, 0xfdc8), "Arabic"))
-SCRIPTS[0xfdcf] = "Arabic"
-SCRIPTS.update(dict.fromkeys(range(0xfdf0, 0xfe00), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0xfe70, 0xfe75), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0xfe76, 0xfefd), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x10e60, 0x10e7f), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x10efd, 0x10f00), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1ee00, 0x1ee04), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1ee05, 0x1ee20), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1ee21, 0x1ee23), "Arabic"))
-SCRIPTS[0x1ee24] = "Arabic"
-SCRIPTS[0x1ee27] = "Arabic"
-SCRIPTS.update(dict.fromkeys(range(0x1ee29, 0x1ee33), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1ee34, 0x1ee38), "Arabic"))
-SCRIPTS[0x1ee39] = "Arabic"
-SCRIPTS[0x1ee3b] = "Arabic"
-SCRIPTS[0x1ee42] = "Arabic"
-SCRIPTS[0x1ee47] = "Arabic"
-SCRIPTS[0x1ee49] = "Arabic"
-SCRIPTS[0x1ee4b] = "Arabic"
-SCRIPTS.update(dict.fromkeys(range(0x1ee4d, 0x1ee50), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1ee51, 0x1ee53), "Arabic"))
-SCRIPTS[0x1ee54] = "Arabic"
-SCRIPTS[0x1ee57] = "Arabic"
-SCRIPTS[0x1ee59] = "Arabic"
-SCRIPTS[0x1ee5b] = "Arabic"
-SCRIPTS[0x1ee5d] = "Arabic"
-SCRIPTS[0x1ee5f] = "Arabic"
-SCRIPTS.update(dict.fromkeys(range(0x1ee61, 0x1ee63), "Arabic"))
-SCRIPTS[0x1ee64] = "Arabic"
-SCRIPTS.update(dict.fromkeys(range(0x1ee67, 0x1ee6b), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1ee6c, 0x1ee73), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1ee74, 0x1ee78), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1ee79, 0x1ee7d), "Arabic"))
-SCRIPTS[0x1ee7e] = "Arabic"
-SCRIPTS.update(dict.fromkeys(range(0x1ee80, 0x1ee8a), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1ee8b, 0x1ee9c), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1eea1, 0x1eea4), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1eea5, 0x1eeaa), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1eeab, 0x1eebc), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x1eef0, 0x1eef2), "Arabic"))
-SCRIPTS.update(dict.fromkeys(range(0x700, 0x70e), "Syriac"))
-SCRIPTS.update(dict.fromkeys(range(0x70f, 0x74b), "Syriac"))
-SCRIPTS.update(dict.fromkeys(range(0x74d, 0x750), "Syriac"))
-SCRIPTS.update(dict.fromkeys(range(0x860, 0x86b), "Syriac"))
-SCRIPTS.update(dict.fromkeys(range(0x780, 0x7b2), "Thaana"))
-SCRIPTS.update(dict.fromkeys(range(0x900, 0x951), "Devanagari"))
-SCRIPTS.update(dict.fromkeys(range(0x955, 0x964), "Devanagari"))
-SCRIPTS.update(dict.fromkeys(range(0x966, 0x980), "Devanagari"))
-SCRIPTS.update(dict.fromkeys(range(0xa8e0, 0xa900), "Devanagari"))
-SCRIPTS.update(dict.fromkeys(range(0x11b00, 0x11b0a), "Devanagari"))
-SCRIPTS.update(dict.fromkeys(range(0x980, 0x984), "Bengali"))
-SCRIPTS.update(dict.fromkeys(range(0x985, 0x98d), "Bengali"))
-SCRIPTS.update(dict.fromkeys(range(0x98f, 0x991), "Bengali"))
-SCRIPTS.update(dict.fromkeys(range(0x993, 0x9a9), "Bengali"))
-SCRIPTS.update(dict.fromkeys(range(0x9aa, 0x9b1), "Bengali"))
-SCRIPTS[0x9b2] = "Bengali"
-SCRIPTS.update(dict.fromkeys(range(0x9b6, 0x9ba), "Bengali"))
-SCRIPTS.update(dict.fromkeys(range(0x9bc, 0x9c5), "Bengali"))
-SCRIPTS.update(dict.fromkeys(range(0x9c7, 0x9c9), "Bengali"))
-SCRIPTS.update(dict.fromkeys(range(0x9cb, 0x9cf), "Bengali"))
-SCRIPTS[0x9d7] = "Bengali"
-SCRIPTS.update(dict.fromkeys(range(0x9dc, 0x9de), "Bengali"))
-SCRIPTS.update(dict.fromkeys(range(0x9df, 0x9e4), "Bengali"))
-SCRIPTS.update(dict.fromkeys(range(0x9e6, 0x9ff), "Bengali"))
-SCRIPTS.update(dict.fromkeys(range(0xa01, 0xa04), "Gurmukhi"))
-SCRIPTS.update(dict.fromkeys(range(0xa05, 0xa0b), "Gurmukhi"))
-SCRIPTS.update(dict.fromkeys(range(0xa0f, 0xa11), "Gurmukhi"))
-SCRIPTS.update(dict.fromkeys(range(0xa13, 0xa29), "Gurmukhi"))
-SCRIPTS.update(dict.fromkeys(range(0xa2a, 0xa31), "Gurmukhi"))
-SCRIPTS.update(dict.fromkeys(range(0xa32, 0xa34), "Gurmukhi"))
-SCRIPTS.update(dict.fromkeys(range(0xa35, 0xa37), "Gurmukhi"))
-SCRIPTS.update(dict.fromkeys(range(0xa38, 0xa3a), "Gurmukhi"))
-SCRIPTS[0xa3c] = "Gurmukhi"
-SCRIPTS.update(dict.fromkeys(range(0xa3e, 0xa43), "Gurmukhi"))
-SCRIPTS.update(dict.fromkeys(range(0xa47, 0xa49), "Gurmukhi"))
-SCRIPTS.update(dict.fromkeys(range(0xa4b, 0xa4e), "Gurmukhi"))
-SCRIPTS[0xa51] = "Gurmukhi"
-SCRIPTS.update(dict.fromkeys(range(0xa59, 0xa5d), "Gurmukhi"))
-SCRIPTS[0xa5e] = "Gurmukhi"
-SCRIPTS.update(dict.fromkeys(range(0xa66, 0xa77), "Gurmukhi"))
-SCRIPTS.update(dict.fromkeys(range(0xa81, 0xa84), "Gujarati"))
-SCRIPTS.update(dict.fromkeys(range(0xa85, 0xa8e), "Gujarati"))
-SCRIPTS.update(dict.fromkeys(range(0xa8f, 0xa92), "Gujarati"))
-SCRIPTS.update(dict.fromkeys(range(0xa93, 0xaa9), "Gujarati"))
-SCRIPTS.update(dict.fromkeys(range(0xaaa, 0xab1), "Gujarati"))
-SCRIPTS.update(dict.fromkeys(range(0xab2, 0xab4), "Gujarati"))
-SCRIPTS.update(dict.fromkeys(range(0xab5, 0xaba), "Gujarati"))
-SCRIPTS.update(dict.fromkeys(range(0xabc, 0xac6), "Gujarati"))
-SCRIPTS.update(dict.fromkeys(range(0xac7, 0xaca), "Gujarati"))
-SCRIPTS.update(dict.fromkeys(range(0xacb, 0xace), "Gujarati"))
-SCRIPTS[0xad0] = "Gujarati"
-SCRIPTS.update(dict.fromkeys(range(0xae0, 0xae4), "Gujarati"))
-SCRIPTS.update(dict.fromkeys(range(0xae6, 0xaf2), "Gujarati"))
-SCRIPTS.update(dict.fromkeys(range(0xaf9, 0xb00), "Gujarati"))
-SCRIPTS.update(dict.fromkeys(range(0xb01, 0xb04), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb05, 0xb0d), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb0f, 0xb11), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb13, 0xb29), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb2a, 0xb31), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb32, 0xb34), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb35, 0xb3a), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb3c, 0xb45), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb47, 0xb49), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb4b, 0xb4e), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb55, 0xb58), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb5c, 0xb5e), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb5f, 0xb64), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb66, 0xb78), "Oriya"))
-SCRIPTS.update(dict.fromkeys(range(0xb82, 0xb84), "Tamil"))
-SCRIPTS.update(dict.fromkeys(range(0xb85, 0xb8b), "Tamil"))
-SCRIPTS.update(dict.fromkeys(range(0xb8e, 0xb91), "Tamil"))
-SCRIPTS.update(dict.fromkeys(range(0xb92, 0xb96), "Tamil"))
-SCRIPTS.update(dict.fromkeys(range(0xb99, 0xb9b), "Tamil"))
-SCRIPTS[0xb9c] = "Tamil"
-SCRIPTS.update(dict.fromkeys(range(0xb9e, 0xba0), "Tamil"))
-SCRIPTS.update(dict.fromkeys(range(0xba3, 0xba5), "Tamil"))
-SCRIPTS.update(dict.fromkeys(range(0xba8, 0xbab), "Tamil"))
-SCRIPTS.update(dict.fromkeys(range(0xbae, 0xbba), "Tamil"))
-SCRIPTS.update(dict.fromkeys(range(0xbbe, 0xbc3), "Tamil"))
-SCRIPTS.update(dict.fromkeys(range(0xbc6, 0xbc9), "Tamil"))
-SCRIPTS.update(dict.fromkeys(range(0xbca, 0xbce), "Tamil"))
-SCRIPTS[0xbd0] = "Tamil"
-SCRIPTS[0xbd7] = "Tamil"
-SCRIPTS.update(dict.fromkeys(range(0xbe6, 0xbfb), "Tamil"))
-SCRIPTS.update(dict.fromkeys(range(0x11fc0, 0x11ff2), "Tamil"))
-SCRIPTS[0x11fff] = "Tamil"
-SCRIPTS.update(dict.fromkeys(range(0xc00, 0xc0d), "Telugu"))
-SCRIPTS.update(dict.fromkeys(range(0xc0e, 0xc11), "Telugu"))
-SCRIPTS.update(dict.fromkeys(range(0xc12, 0xc29), "Telugu"))
-SCRIPTS.update(dict.fromkeys(range(0xc2a, 0xc3a), "Telugu"))
-SCRIPTS.update(dict.fromkeys(range(0xc3c, 0xc45), "Telugu"))
-SCRIPTS.update(dict.fromkeys(range(0xc46, 0xc49), "Telugu"))
-SCRIPTS.update(dict.fromkeys(range(0xc4a, 0xc4e), "Telugu"))
-SCRIPTS.update(dict.fromkeys(range(0xc55, 0xc57), "Telugu"))
-SCRIPTS.update(dict.fromkeys(range(0xc58, 0xc5b), "Telugu"))
-SCRIPTS[0xc5d] = "Telugu"
-SCRIPTS.update(dict.fromkeys(range(0xc60, 0xc64), "Telugu"))
-SCRIPTS.update(dict.fromkeys(range(0xc66, 0xc70), "Telugu"))
-SCRIPTS.update(dict.fromkeys(range(0xc77, 0xc80), "Telugu"))
-SCRIPTS.update(dict.fromkeys(range(0xc80, 0xc8d), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xc8e, 0xc91), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xc92, 0xca9), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xcaa, 0xcb4), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xcb5, 0xcba), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xcbc, 0xcc5), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xcc6, 0xcc9), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xcca, 0xcce), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xcd5, 0xcd7), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xcdd, 0xcdf), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xce0, 0xce4), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xce6, 0xcf0), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xcf1, 0xcf4), "Kannada"))
-SCRIPTS.update(dict.fromkeys(range(0xd00, 0xd0d), "Malayalam"))
-SCRIPTS.update(dict.fromkeys(range(0xd0e, 0xd11), "Malayalam"))
-SCRIPTS.update(dict.fromkeys(range(0xd12, 0xd45), "Malayalam"))
-SCRIPTS.update(dict.fromkeys(range(0xd46, 0xd49), "Malayalam"))
-SCRIPTS.update(dict.fromkeys(range(0xd4a, 0xd50), "Malayalam"))
-SCRIPTS.update(dict.fromkeys(range(0xd54, 0xd64), "Malayalam"))
-SCRIPTS.update(dict.fromkeys(range(0xd66, 0xd80), "Malayalam"))
-SCRIPTS.update(dict.fromkeys(range(0xd81, 0xd84), "Sinhala"))
-SCRIPTS.update(dict.fromkeys(range(0xd85, 0xd97), "Sinhala"))
-SCRIPTS.update(dict.fromkeys(range(0xd9a, 0xdb2), "Sinhala"))
-SCRIPTS.update(dict.fromkeys(range(0xdb3, 0xdbc), "Sinhala"))
-SCRIPTS[0xdbd] = "Sinhala"
-SCRIPTS.update(dict.fromkeys(range(0xdc0, 0xdc7), "Sinhala"))
-SCRIPTS[0xdca] = "Sinhala"
-SCRIPTS.update(dict.fromkeys(range(0xdcf, 0xdd5), "Sinhala"))
-SCRIPTS[0xdd6] = "Sinhala"
-SCRIPTS.update(dict.fromkeys(range(0xdd8, 0xde0), "Sinhala"))
-SCRIPTS.update(dict.fromkeys(range(0xde6, 0xdf0), "Sinhala"))
-SCRIPTS.update(dict.fromkeys(range(0xdf2, 0xdf5), "Sinhala"))
-SCRIPTS.update(dict.fromkeys(range(0x111e1, 0x111f5), "Sinhala"))
-SCRIPTS.update(dict.fromkeys(range(0xe01, 0xe3b), "Thai"))
-SCRIPTS.update(dict.fromkeys(range(0xe40, 0xe5c), "Thai"))
-SCRIPTS.update(dict.fromkeys(range(0xe81, 0xe83), "Lao"))
-SCRIPTS[0xe84] = "Lao"
-SCRIPTS.update(dict.fromkeys(range(0xe86, 0xe8b), "Lao"))
-SCRIPTS.update(dict.fromkeys(range(0xe8c, 0xea4), "Lao"))
-SCRIPTS[0xea5] = "Lao"
-SCRIPTS.update(dict.fromkeys(range(0xea7, 0xebe), "Lao"))
-SCRIPTS.update(dict.fromkeys(range(0xec0, 0xec5), "Lao"))
-SCRIPTS[0xec6] = "Lao"
-SCRIPTS.update(dict.fromkeys(range(0xec8, 0xecf), "Lao"))
-SCRIPTS.update(dict.fromkeys(range(0xed0, 0xeda), "Lao"))
-SCRIPTS.update(dict.fromkeys(range(0xedc, 0xee0), "Lao"))
-SCRIPTS.update(dict.fromkeys(range(0xf00, 0xf48), "Tibetan"))
-SCRIPTS.update(dict.fromkeys(range(0xf49, 0xf6d), "Tibetan"))
-SCRIPTS.update(dict.fromkeys(range(0xf71, 0xf98), "Tibetan"))
-SCRIPTS.update(dict.fromkeys(range(0xf99, 0xfbd), "Tibetan"))
-SCRIPTS.update(dict.fromkeys(range(0xfbe, 0xfcd), "Tibetan"))
-SCRIPTS.update(dict.fromkeys(range(0xfce, 0xfd5), "Tibetan"))
-SCRIPTS.update(dict.fromkeys(range(0xfd9, 0xfdb), "Tibetan"))
-SCRIPTS.update(dict.fromkeys(range(0x1000, 0x10a0), "Myanmar"))
-SCRIPTS.update(dict.fromkeys(range(0xa9e0, 0xa9ff), "Myanmar"))
-SCRIPTS.update(dict.fromkeys(range(0xaa60, 0xaa80), "Myanmar"))
-SCRIPTS.update(dict.fromkeys(range(0x10a0, 0x10c6), "Georgian"))
-SCRIPTS[0x10c7] = "Georgian"
-SCRIPTS[0x10cd] = "Georgian"
-SCRIPTS.update(dict.fromkeys(range(0x10d0, 0x10fb), "Georgian"))
-SCRIPTS.update(dict.fromkeys(range(0x10fc, 0x1100), "Georgian"))
-SCRIPTS.update(dict.fromkeys(range(0x1c90, 0x1cbb), "Georgian"))
-SCRIPTS.update(dict.fromkeys(range(0x1cbd, 0x1cc0), "Georgian"))
-SCRIPTS.update(dict.fromkeys(range(0x2d00, 0x2d26), "Georgian"))
-SCRIPTS[0x2d27] = "Georgian"
-SCRIPTS[0x2d2d] = "Georgian"
-SCRIPTS.update(dict.fromkeys(range(0x1100, 0x1200), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0x302e, 0x3030), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0x3131, 0x318f), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0x3200, 0x321f), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0x3260, 0x327f), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0xa960, 0xa97d), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0xac00, 0xd7a4), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0xd7b0, 0xd7c7), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0xd7cb, 0xd7fc), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0xffa0, 0xffbf), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0xffc2, 0xffc8), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0xffca, 0xffd0), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0xffd2, 0xffd8), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0xffda, 0xffdd), "Hangul"))
-SCRIPTS.update(dict.fromkeys(range(0x1200, 0x1249), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x124a, 0x124e), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x1250, 0x1257), "Ethiopic"))
-SCRIPTS[0x1258] = "Ethiopic"
-SCRIPTS.update(dict.fromkeys(range(0x125a, 0x125e), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x1260, 0x1289), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x128a, 0x128e), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x1290, 0x12b1), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x12b2, 0x12b6), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x12b8, 0x12bf), "Ethiopic"))
-SCRIPTS[0x12c0] = "Ethiopic"
-SCRIPTS.update(dict.fromkeys(range(0x12c2, 0x12c6), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x12c8, 0x12d7), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x12d8, 0x1311), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x1312, 0x1316), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x1318, 0x135b), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x135d, 0x137d), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x1380, 0x139a), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x2d80, 0x2d97), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x2da0, 0x2da7), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x2da8, 0x2daf), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x2db0, 0x2db7), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x2db8, 0x2dbf), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x2dc0, 0x2dc7), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x2dc8, 0x2dcf), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x2dd0, 0x2dd7), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x2dd8, 0x2ddf), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0xab01, 0xab07), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0xab09, 0xab0f), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0xab11, 0xab17), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0xab20, 0xab27), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0xab28, 0xab2f), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x1e7e0, 0x1e7e7), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x1e7e8, 0x1e7ec), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x1e7ed, 0x1e7ef), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x1e7f0, 0x1e7ff), "Ethiopic"))
-SCRIPTS.update(dict.fromkeys(range(0x13a0, 0x13f6), "Cherokee"))
-SCRIPTS.update(dict.fromkeys(range(0x13f8, 0x13fe), "Cherokee"))
-SCRIPTS.update(dict.fromkeys(range(0xab70, 0xabc0), "Cherokee"))
-SCRIPTS.update(dict.fromkeys(range(0x1400, 0x1680), "Canadian_Aboriginal"))
-SCRIPTS.update(dict.fromkeys(range(0x18b0, 0x18f6), "Canadian_Aboriginal"))
-SCRIPTS.update(dict.fromkeys(range(0x11ab0, 0x11ac0), "Canadian_Aboriginal"))
-SCRIPTS.update(dict.fromkeys(range(0x1680, 0x169d), "Ogham"))
-SCRIPTS.update(dict.fromkeys(range(0x16a0, 0x16eb), "Runic"))
-SCRIPTS.update(dict.fromkeys(range(0x16ee, 0x16f9), "Runic"))
-SCRIPTS.update(dict.fromkeys(range(0x1780, 0x17de), "Khmer"))
-SCRIPTS.update(dict.fromkeys(range(0x17e0, 0x17ea), "Khmer"))
-SCRIPTS.update(dict.fromkeys(range(0x17f0, 0x17fa), "Khmer"))
-SCRIPTS.update(dict.fromkeys(range(0x19e0, 0x1a00), "Khmer"))
-SCRIPTS.update(dict.fromkeys(range(0x1800, 0x1802), "Mongolian"))
-SCRIPTS[0x1804] = "Mongolian"
-SCRIPTS.update(dict.fromkeys(range(0x1806, 0x181a), "Mongolian"))
-SCRIPTS.update(dict.fromkeys(range(0x1820, 0x1879), "Mongolian"))
-SCRIPTS.update(dict.fromkeys(range(0x1880, 0x18ab), "Mongolian"))
-SCRIPTS.update(dict.fromkeys(range(0x11660, 0x1166d), "Mongolian"))
-SCRIPTS.update(dict.fromkeys(range(0x3041, 0x3097), "Hiragana"))
-SCRIPTS.update(dict.fromkeys(range(0x309d, 0x30a0), "Hiragana"))
-SCRIPTS.update(dict.fromkeys(range(0x1b001, 0x1b120), "Hiragana"))
-SCRIPTS[0x1b132] = "Hiragana"
-SCRIPTS.update(dict.fromkeys(range(0x1b150, 0x1b153), "Hiragana"))
-SCRIPTS[0x1f200] = "Hiragana"
-SCRIPTS.update(dict.fromkeys(range(0x30a1, 0x30fb), "Katakana"))
-SCRIPTS.update(dict.fromkeys(range(0x30fd, 0x3100), "Katakana"))
-SCRIPTS.update(dict.fromkeys(range(0x31f0, 0x3200), "Katakana"))
-SCRIPTS.update(dict.fromkeys(range(0x32d0, 0x32ff), "Katakana"))
-SCRIPTS.update(dict.fromkeys(range(0x3300, 0x3358), "Katakana"))
-SCRIPTS.update(dict.fromkeys(range(0xff66, 0xff70), "Katakana"))
-SCRIPTS.update(dict.fromkeys(range(0xff71, 0xff9e), "Katakana"))
-SCRIPTS.update(dict.fromkeys(range(0x1aff0, 0x1aff4), "Katakana"))
-SCRIPTS.update(dict.fromkeys(range(0x1aff5, 0x1affc), "Katakana"))
-SCRIPTS.update(dict.fromkeys(range(0x1affd, 0x1afff), "Katakana"))
-SCRIPTS[0x1b000] = "Katakana"
-SCRIPTS.update(dict.fromkeys(range(0x1b120, 0x1b123), "Katakana"))
-SCRIPTS[0x1b155] = "Katakana"
-SCRIPTS.update(dict.fromkeys(range(0x1b164, 0x1b168), "Katakana"))
-SCRIPTS.update(dict.fromkeys(range(0x2ea, 0x2ec), "Bopomofo"))
-SCRIPTS.update(dict.fromkeys(range(0x3105, 0x3130), "Bopomofo"))
-SCRIPTS.update(dict.fromkeys(range(0x31a0, 0x31c0), "Bopomofo"))
-SCRIPTS.update(dict.fromkeys(range(0x2e80, 0x2e9a), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x2e9b, 0x2ef4), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x2f00, 0x2fd6), "Han"))
-SCRIPTS[0x3005] = "Han"
-SCRIPTS[0x3007] = "Han"
-SCRIPTS.update(dict.fromkeys(range(0x3021, 0x302a), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x3038, 0x303c), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x3400, 0x4dc0), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x4e00, 0xa000), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0xf900, 0xfa6e), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0xfa70, 0xfada), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x16fe2, 0x16fe4), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x16ff0, 0x16ff2), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x20000, 0x2a6e0), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x2a700, 0x2b73a), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x2b740, 0x2b81e), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x2b820, 0x2cea2), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x2ceb0, 0x2ebe1), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x2ebf0, 0x2ee5e), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x2f800, 0x2fa1e), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x30000, 0x3134b), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0x31350, 0x323b0), "Han"))
-SCRIPTS.update(dict.fromkeys(range(0xa000, 0xa48d), "Yi"))
-SCRIPTS.update(dict.fromkeys(range(0xa490, 0xa4c7), "Yi"))
-SCRIPTS.update(dict.fromkeys(range(0x10300, 0x10324), "Old_Italic"))
-SCRIPTS.update(dict.fromkeys(range(0x1032d, 0x10330), "Old_Italic"))
-SCRIPTS.update(dict.fromkeys(range(0x10330, 0x1034b), "Gothic"))
-SCRIPTS.update(dict.fromkeys(range(0x10400, 0x10450), "Deseret"))
-SCRIPTS.update(dict.fromkeys(range(0x300, 0x370), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x485, 0x487), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x64b, 0x656), "Inherited"))
-SCRIPTS[0x670] = "Inherited"
-SCRIPTS.update(dict.fromkeys(range(0x951, 0x955), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x1ab0, 0x1acf), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x1cd0, 0x1cd3), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x1cd4, 0x1ce1), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x1ce2, 0x1ce9), "Inherited"))
-SCRIPTS[0x1ced] = "Inherited"
-SCRIPTS[0x1cf4] = "Inherited"
-SCRIPTS.update(dict.fromkeys(range(0x1cf8, 0x1cfa), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x1dc0, 0x1e00), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x200c, 0x200e), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x20d0, 0x20f1), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x302a, 0x302e), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x3099, 0x309b), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0xfe00, 0xfe10), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0xfe20, 0xfe2e), "Inherited"))
-SCRIPTS[0x101fd] = "Inherited"
-SCRIPTS[0x102e0] = "Inherited"
-SCRIPTS[0x1133b] = "Inherited"
-SCRIPTS.update(dict.fromkeys(range(0x1cf00, 0x1cf2e), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x1cf30, 0x1cf47), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x1d167, 0x1d16a), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x1d17b, 0x1d183), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x1d185, 0x1d18c), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x1d1aa, 0x1d1ae), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0xe0100, 0xe01f0), "Inherited"))
-SCRIPTS.update(dict.fromkeys(range(0x1700, 0x1716), "Tagalog"))
-SCRIPTS[0x171f] = "Tagalog"
-SCRIPTS.update(dict.fromkeys(range(0x1720, 0x1735), "Hanunoo"))
-SCRIPTS.update(dict.fromkeys(range(0x1740, 0x1754), "Buhid"))
-SCRIPTS.update(dict.fromkeys(range(0x1760, 0x176d), "Tagbanwa"))
-SCRIPTS.update(dict.fromkeys(range(0x176e, 0x1771), "Tagbanwa"))
-SCRIPTS.update(dict.fromkeys(range(0x1772, 0x1774), "Tagbanwa"))
-SCRIPTS.update(dict.fromkeys(range(0x1900, 0x191f), "Limbu"))
-SCRIPTS.update(dict.fromkeys(range(0x1920, 0x192c), "Limbu"))
-SCRIPTS.update(dict.fromkeys(range(0x1930, 0x193c), "Limbu"))
-SCRIPTS[0x1940] = "Limbu"
-SCRIPTS.update(dict.fromkeys(range(0x1944, 0x1950), "Limbu"))
-SCRIPTS.update(dict.fromkeys(range(0x1950, 0x196e), "Tai_Le"))
-SCRIPTS.update(dict.fromkeys(range(0x1970, 0x1975), "Tai_Le"))
-SCRIPTS.update(dict.fromkeys(range(0x10000, 0x1000c), "Linear_B"))
-SCRIPTS.update(dict.fromkeys(range(0x1000d, 0x10027), "Linear_B"))
-SCRIPTS.update(dict.fromkeys(range(0x10028, 0x1003b), "Linear_B"))
-SCRIPTS.update(dict.fromkeys(range(0x1003c, 0x1003e), "Linear_B"))
-SCRIPTS.update(dict.fromkeys(range(0x1003f, 0x1004e), "Linear_B"))
-SCRIPTS.update(dict.fromkeys(range(0x10050, 0x1005e), "Linear_B"))
-SCRIPTS.update(dict.fromkeys(range(0x10080, 0x100fb), "Linear_B"))
-SCRIPTS.update(dict.fromkeys(range(0x10380, 0x1039e), "Ugaritic"))
-SCRIPTS[0x1039f] = "Ugaritic"
-SCRIPTS.update(dict.fromkeys(range(0x10450, 0x10480), "Shavian"))
-SCRIPTS.update(dict.fromkeys(range(0x10480, 0x1049e), "Osmanya"))
-SCRIPTS.update(dict.fromkeys(range(0x104a0, 0x104aa), "Osmanya"))
-SCRIPTS.update(dict.fromkeys(range(0x10800, 0x10806), "Cypriot"))
-SCRIPTS[0x10808] = "Cypriot"
-SCRIPTS.update(dict.fromkeys(range(0x1080a, 0x10836), "Cypriot"))
-SCRIPTS.update(dict.fromkeys(range(0x10837, 0x10839), "Cypriot"))
-SCRIPTS[0x1083c] = "Cypriot"
-SCRIPTS[0x1083f] = "Cypriot"
-SCRIPTS.update(dict.fromkeys(range(0x2800, 0x2900), "Braille"))
-SCRIPTS.update(dict.fromkeys(range(0x1a00, 0x1a1c), "Buginese"))
-SCRIPTS.update(dict.fromkeys(range(0x1a1e, 0x1a20), "Buginese"))
-SCRIPTS.update(dict.fromkeys(range(0x3e2, 0x3f0), "Coptic"))
-SCRIPTS.update(dict.fromkeys(range(0x2c80, 0x2cf4), "Coptic"))
-SCRIPTS.update(dict.fromkeys(range(0x2cf9, 0x2d00), "Coptic"))
-SCRIPTS.update(dict.fromkeys(range(0x1980, 0x19ac), "New_Tai_Lue"))
-SCRIPTS.update(dict.fromkeys(range(0x19b0, 0x19ca), "New_Tai_Lue"))
-SCRIPTS.update(dict.fromkeys(range(0x19d0, 0x19db), "New_Tai_Lue"))
-SCRIPTS.update(dict.fromkeys(range(0x19de, 0x19e0), "New_Tai_Lue"))
-SCRIPTS.update(dict.fromkeys(range(0x2c00, 0x2c60), "Glagolitic"))
-SCRIPTS.update(dict.fromkeys(range(0x1e000, 0x1e007), "Glagolitic"))
-SCRIPTS.update(dict.fromkeys(range(0x1e008, 0x1e019), "Glagolitic"))
-SCRIPTS.update(dict.fromkeys(range(0x1e01b, 0x1e022), "Glagolitic"))
-SCRIPTS.update(dict.fromkeys(range(0x1e023, 0x1e025), "Glagolitic"))
-SCRIPTS.update(dict.fromkeys(range(0x1e026, 0x1e02b), "Glagolitic"))
-SCRIPTS.update(dict.fromkeys(range(0x2d30, 0x2d68), "Tifinagh"))
-SCRIPTS.update(dict.fromkeys(range(0x2d6f, 0x2d71), "Tifinagh"))
-SCRIPTS[0x2d7f] = "Tifinagh"
-SCRIPTS.update(dict.fromkeys(range(0xa800, 0xa82d), "Syloti_Nagri"))
-SCRIPTS.update(dict.fromkeys(range(0x103a0, 0x103c4), "Old_Persian"))
-SCRIPTS.update(dict.fromkeys(range(0x103c8, 0x103d6), "Old_Persian"))
-SCRIPTS.update(dict.fromkeys(range(0x10a00, 0x10a04), "Kharoshthi"))
-SCRIPTS.update(dict.fromkeys(range(0x10a05, 0x10a07), "Kharoshthi"))
-SCRIPTS.update(dict.fromkeys(range(0x10a0c, 0x10a14), "Kharoshthi"))
-SCRIPTS.update(dict.fromkeys(range(0x10a15, 0x10a18), "Kharoshthi"))
-SCRIPTS.update(dict.fromkeys(range(0x10a19, 0x10a36), "Kharoshthi"))
-SCRIPTS.update(dict.fromkeys(range(0x10a38, 0x10a3b), "Kharoshthi"))
-SCRIPTS.update(dict.fromkeys(range(0x10a3f, 0x10a49), "Kharoshthi"))
-SCRIPTS.update(dict.fromkeys(range(0x10a50, 0x10a59), "Kharoshthi"))
-SCRIPTS.update(dict.fromkeys(range(0x1b00, 0x1b4d), "Balinese"))
-SCRIPTS.update(dict.fromkeys(range(0x1b50, 0x1b7f), "Balinese"))
-SCRIPTS.update(dict.fromkeys(range(0x12000, 0x1239a), "Cuneiform"))
-SCRIPTS.update(dict.fromkeys(range(0x12400, 0x1246f), "Cuneiform"))
-SCRIPTS.update(dict.fromkeys(range(0x12470, 0x12475), "Cuneiform"))
-SCRIPTS.update(dict.fromkeys(range(0x12480, 0x12544), "Cuneiform"))
-SCRIPTS.update(dict.fromkeys(range(0x10900, 0x1091c), "Phoenician"))
-SCRIPTS[0x1091f] = "Phoenician"
-SCRIPTS.update(dict.fromkeys(range(0xa840, 0xa878), "Phags_Pa"))
-SCRIPTS.update(dict.fromkeys(range(0x7c0, 0x7fb), "Nko"))
-SCRIPTS.update(dict.fromkeys(range(0x7fd, 0x800), "Nko"))
-SCRIPTS.update(dict.fromkeys(range(0x1b80, 0x1bc0), "Sundanese"))
-SCRIPTS.update(dict.fromkeys(range(0x1cc0, 0x1cc8), "Sundanese"))
-SCRIPTS.update(dict.fromkeys(range(0x1c00, 0x1c38), "Lepcha"))
-SCRIPTS.update(dict.fromkeys(range(0x1c3b, 0x1c4a), "Lepcha"))
-SCRIPTS.update(dict.fromkeys(range(0x1c4d, 0x1c50), "Lepcha"))
-SCRIPTS.update(dict.fromkeys(range(0x1c50, 0x1c80), "Ol_Chiki"))
-SCRIPTS.update(dict.fromkeys(range(0xa500, 0xa62c), "Vai"))
-SCRIPTS.update(dict.fromkeys(range(0xa880, 0xa8c6), "Saurashtra"))
-SCRIPTS.update(dict.fromkeys(range(0xa8ce, 0xa8da), "Saurashtra"))
-SCRIPTS.update(dict.fromkeys(range(0xa900, 0xa92e), "Kayah_Li"))
-SCRIPTS[0xa92f] = "Kayah_Li"
-SCRIPTS.update(dict.fromkeys(range(0xa930, 0xa954), "Rejang"))
-SCRIPTS[0xa95f] = "Rejang"
-SCRIPTS.update(dict.fromkeys(range(0x10280, 0x1029d), "Lycian"))
-SCRIPTS.update(dict.fromkeys(range(0x102a0, 0x102d1), "Carian"))
-SCRIPTS.update(dict.fromkeys(range(0x10920, 0x1093a), "Lydian"))
-SCRIPTS[0x1093f] = "Lydian"
-SCRIPTS.update(dict.fromkeys(range(0xaa00, 0xaa37), "Cham"))
-SCRIPTS.update(dict.fromkeys(range(0xaa40, 0xaa4e), "Cham"))
-SCRIPTS.update(dict.fromkeys(range(0xaa50, 0xaa5a), "Cham"))
-SCRIPTS.update(dict.fromkeys(range(0xaa5c, 0xaa60), "Cham"))
-SCRIPTS.update(dict.fromkeys(range(0x1a20, 0x1a5f), "Tai_Tham"))
-SCRIPTS.update(dict.fromkeys(range(0x1a60, 0x1a7d), "Tai_Tham"))
-SCRIPTS.update(dict.fromkeys(range(0x1a7f, 0x1a8a), "Tai_Tham"))
-SCRIPTS.update(dict.fromkeys(range(0x1a90, 0x1a9a), "Tai_Tham"))
-SCRIPTS.update(dict.fromkeys(range(0x1aa0, 0x1aae), "Tai_Tham"))
-SCRIPTS.update(dict.fromkeys(range(0xaa80, 0xaac3), "Tai_Viet"))
-SCRIPTS.update(dict.fromkeys(range(0xaadb, 0xaae0), "Tai_Viet"))
-SCRIPTS.update(dict.fromkeys(range(0x10b00, 0x10b36), "Avestan"))
-SCRIPTS.update(dict.fromkeys(range(0x10b39, 0x10b40), "Avestan"))
-SCRIPTS.update(dict.fromkeys(range(0x13000, 0x13456), "Egyptian_Hieroglyphs"))
-SCRIPTS.update(dict.fromkeys(range(0x800, 0x82e), "Samaritan"))
-SCRIPTS.update(dict.fromkeys(range(0x830, 0x83f), "Samaritan"))
-SCRIPTS.update(dict.fromkeys(range(0xa4d0, 0xa500), "Lisu"))
-SCRIPTS[0x11fb0] = "Lisu"
-SCRIPTS.update(dict.fromkeys(range(0xa6a0, 0xa6f8), "Bamum"))
-SCRIPTS.update(dict.fromkeys(range(0x16800, 0x16a39), "Bamum"))
-SCRIPTS.update(dict.fromkeys(range(0xa980, 0xa9ce), "Javanese"))
-SCRIPTS.update(dict.fromkeys(range(0xa9d0, 0xa9da), "Javanese"))
-SCRIPTS.update(dict.fromkeys(range(0xa9de, 0xa9e0), "Javanese"))
-SCRIPTS.update(dict.fromkeys(range(0xaae0, 0xaaf7), "Meetei_Mayek"))
-SCRIPTS.update(dict.fromkeys(range(0xabc0, 0xabee), "Meetei_Mayek"))
-SCRIPTS.update(dict.fromkeys(range(0xabf0, 0xabfa), "Meetei_Mayek"))
-SCRIPTS.update(dict.fromkeys(range(0x10840, 0x10856), "Imperial_Aramaic"))
-SCRIPTS.update(dict.fromkeys(range(0x10857, 0x10860), "Imperial_Aramaic"))
-SCRIPTS.update(dict.fromkeys(range(0x10a60, 0x10a80), "Old_South_Arabian"))
-SCRIPTS.update(dict.fromkeys(range(0x10b40, 0x10b56), "Inscriptional_Parthian"))
-SCRIPTS.update(dict.fromkeys(range(0x10b58, 0x10b60), "Inscriptional_Parthian"))
-SCRIPTS.update(dict.fromkeys(range(0x10b60, 0x10b73), "Inscriptional_Pahlavi"))
-SCRIPTS.update(dict.fromkeys(range(0x10b78, 0x10b80), "Inscriptional_Pahlavi"))
-SCRIPTS.update(dict.fromkeys(range(0x10c00, 0x10c49), "Old_Turkic"))
-SCRIPTS.update(dict.fromkeys(range(0x11080, 0x110c3), "Kaithi"))
-SCRIPTS[0x110cd] = "Kaithi"
-SCRIPTS.update(dict.fromkeys(range(0x1bc0, 0x1bf4), "Batak"))
-SCRIPTS.update(dict.fromkeys(range(0x1bfc, 0x1c00), "Batak"))
-SCRIPTS.update(dict.fromkeys(range(0x11000, 0x1104e), "Brahmi"))
-SCRIPTS.update(dict.fromkeys(range(0x11052, 0x11076), "Brahmi"))
-SCRIPTS[0x1107f] = "Brahmi"
-SCRIPTS.update(dict.fromkeys(range(0x840, 0x85c), "Mandaic"))
-SCRIPTS[0x85e] = "Mandaic"
-SCRIPTS.update(dict.fromkeys(range(0x11100, 0x11135), "Chakma"))
-SCRIPTS.update(dict.fromkeys(range(0x11136, 0x11148), "Chakma"))
-SCRIPTS.update(dict.fromkeys(range(0x109a0, 0x109b8), "Meroitic_Cursive"))
-SCRIPTS.update(dict.fromkeys(range(0x109bc, 0x109d0), "Meroitic_Cursive"))
-SCRIPTS.update(dict.fromkeys(range(0x109d2, 0x10a00), "Meroitic_Cursive"))
-SCRIPTS.update(dict.fromkeys(range(0x10980, 0x109a0), "Meroitic_Hieroglyphs"))
-SCRIPTS.update(dict.fromkeys(range(0x16f00, 0x16f4b), "Miao"))
-SCRIPTS.update(dict.fromkeys(range(0x16f4f, 0x16f88), "Miao"))
-SCRIPTS.update(dict.fromkeys(range(0x16f8f, 0x16fa0), "Miao"))
-SCRIPTS.update(dict.fromkeys(range(0x11180, 0x111e0), "Sharada"))
-SCRIPTS.update(dict.fromkeys(range(0x110d0, 0x110e9), "Sora_Sompeng"))
-SCRIPTS.update(dict.fromkeys(range(0x110f0, 0x110fa), "Sora_Sompeng"))
-SCRIPTS.update(dict.fromkeys(range(0x11680, 0x116ba), "Takri"))
-SCRIPTS.update(dict.fromkeys(range(0x116c0, 0x116ca), "Takri"))
-SCRIPTS.update(dict.fromkeys(range(0x10530, 0x10564), "Caucasian_Albanian"))
-SCRIPTS[0x1056f] = "Caucasian_Albanian"
-SCRIPTS.update(dict.fromkeys(range(0x16ad0, 0x16aee), "Bassa_Vah"))
-SCRIPTS.update(dict.fromkeys(range(0x16af0, 0x16af6), "Bassa_Vah"))
-SCRIPTS.update(dict.fromkeys(range(0x1bc00, 0x1bc6b), "Duployan"))
-SCRIPTS.update(dict.fromkeys(range(0x1bc70, 0x1bc7d), "Duployan"))
-SCRIPTS.update(dict.fromkeys(range(0x1bc80, 0x1bc89), "Duployan"))
-SCRIPTS.update(dict.fromkeys(range(0x1bc90, 0x1bc9a), "Duployan"))
-SCRIPTS.update(dict.fromkeys(range(0x1bc9c, 0x1bca0), "Duployan"))
-SCRIPTS.update(dict.fromkeys(range(0x10500, 0x10528), "Elbasan"))
-SCRIPTS.update(dict.fromkeys(range(0x11300, 0x11304), "Grantha"))
-SCRIPTS.update(dict.fromkeys(range(0x11305, 0x1130d), "Grantha"))
-SCRIPTS.update(dict.fromkeys(range(0x1130f, 0x11311), "Grantha"))
-SCRIPTS.update(dict.fromkeys(range(0x11313, 0x11329), "Grantha"))
-SCRIPTS.update(dict.fromkeys(range(0x1132a, 0x11331), "Grantha"))
-SCRIPTS.update(dict.fromkeys(range(0x11332, 0x11334), "Grantha"))
-SCRIPTS.update(dict.fromkeys(range(0x11335, 0x1133a), "Grantha"))
-SCRIPTS.update(dict.fromkeys(range(0x1133c, 0x11345), "Grantha"))
-SCRIPTS.update(dict.fromkeys(range(0x11347, 0x11349), "Grantha"))
-SCRIPTS.update(dict.fromkeys(range(0x1134b, 0x1134e), "Grantha"))
-SCRIPTS[0x11350] = "Grantha"
-SCRIPTS[0x11357] = "Grantha"
-SCRIPTS.update(dict.fromkeys(range(0x1135d, 0x11364), "Grantha"))
-SCRIPTS.update(dict.fromkeys(range(0x11366, 0x1136d), "Grantha"))
-SCRIPTS.update(dict.fromkeys(range(0x11370, 0x11375), "Grantha"))
-SCRIPTS.update(dict.fromkeys(range(0x16b00, 0x16b46), "Pahawh_Hmong"))
-SCRIPTS.update(dict.fromkeys(range(0x16b50, 0x16b5a), "Pahawh_Hmong"))
-SCRIPTS.update(dict.fromkeys(range(0x16b5b, 0x16b62), "Pahawh_Hmong"))
-SCRIPTS.update(dict.fromkeys(range(0x16b63, 0x16b78), "Pahawh_Hmong"))
-SCRIPTS.update(dict.fromkeys(range(0x16b7d, 0x16b90), "Pahawh_Hmong"))
-SCRIPTS.update(dict.fromkeys(range(0x11200, 0x11212), "Khojki"))
-SCRIPTS.update(dict.fromkeys(range(0x11213, 0x11242), "Khojki"))
-SCRIPTS.update(dict.fromkeys(range(0x10600, 0x10737), "Linear_A"))
-SCRIPTS.update(dict.fromkeys(range(0x10740, 0x10756), "Linear_A"))
-SCRIPTS.update(dict.fromkeys(range(0x10760, 0x10768), "Linear_A"))
-SCRIPTS.update(dict.fromkeys(range(0x11150, 0x11177), "Mahajani"))
-SCRIPTS.update(dict.fromkeys(range(0x10ac0, 0x10ae7), "Manichaean"))
-SCRIPTS.update(dict.fromkeys(range(0x10aeb, 0x10af7), "Manichaean"))
-SCRIPTS.update(dict.fromkeys(range(0x1e800, 0x1e8c5), "Mende_Kikakui"))
-SCRIPTS.update(dict.fromkeys(range(0x1e8c7, 0x1e8d7), "Mende_Kikakui"))
-SCRIPTS.update(dict.fromkeys(range(0x11600, 0x11645), "Modi"))
-SCRIPTS.update(dict.fromkeys(range(0x11650, 0x1165a), "Modi"))
-SCRIPTS.update(dict.fromkeys(range(0x16a40, 0x16a5f), "Mro"))
-SCRIPTS.update(dict.fromkeys(range(0x16a60, 0x16a6a), "Mro"))
-SCRIPTS.update(dict.fromkeys(range(0x16a6e, 0x16a70), "Mro"))
-SCRIPTS.update(dict.fromkeys(range(0x10a80, 0x10aa0), "Old_North_Arabian"))
-SCRIPTS.update(dict.fromkeys(range(0x10880, 0x1089f), "Nabataean"))
-SCRIPTS.update(dict.fromkeys(range(0x108a7, 0x108b0), "Nabataean"))
-SCRIPTS.update(dict.fromkeys(range(0x10860, 0x10880), "Palmyrene"))
-SCRIPTS.update(dict.fromkeys(range(0x11ac0, 0x11af9), "Pau_Cin_Hau"))
-SCRIPTS.update(dict.fromkeys(range(0x10350, 0x1037b), "Old_Permic"))
-SCRIPTS.update(dict.fromkeys(range(0x10b80, 0x10b92), "Psalter_Pahlavi"))
-SCRIPTS.update(dict.fromkeys(range(0x10b99, 0x10b9d), "Psalter_Pahlavi"))
-SCRIPTS.update(dict.fromkeys(range(0x10ba9, 0x10bb0), "Psalter_Pahlavi"))
-SCRIPTS.update(dict.fromkeys(range(0x11580, 0x115b6), "Siddham"))
-SCRIPTS.update(dict.fromkeys(range(0x115b8, 0x115de), "Siddham"))
-SCRIPTS.update(dict.fromkeys(range(0x112b0, 0x112eb), "Khudawadi"))
-SCRIPTS.update(dict.fromkeys(range(0x112f0, 0x112fa), "Khudawadi"))
-SCRIPTS.update(dict.fromkeys(range(0x11480, 0x114c8), "Tirhuta"))
-SCRIPTS.update(dict.fromkeys(range(0x114d0, 0x114da), "Tirhuta"))
-SCRIPTS.update(dict.fromkeys(range(0x118a0, 0x118f3), "Warang_Citi"))
-SCRIPTS[0x118ff] = "Warang_Citi"
-SCRIPTS.update(dict.fromkeys(range(0x11700, 0x1171b), "Ahom"))
-SCRIPTS.update(dict.fromkeys(range(0x1171d, 0x1172c), "Ahom"))
-SCRIPTS.update(dict.fromkeys(range(0x11730, 0x11747), "Ahom"))
-SCRIPTS.update(dict.fromkeys(range(0x14400, 0x14647), "Anatolian_Hieroglyphs"))
-SCRIPTS.update(dict.fromkeys(range(0x108e0, 0x108f3), "Hatran"))
-SCRIPTS.update(dict.fromkeys(range(0x108f4, 0x108f6), "Hatran"))
-SCRIPTS.update(dict.fromkeys(range(0x108fb, 0x10900), "Hatran"))
-SCRIPTS.update(dict.fromkeys(range(0x11280, 0x11287), "Multani"))
-SCRIPTS[0x11288] = "Multani"
-SCRIPTS.update(dict.fromkeys(range(0x1128a, 0x1128e), "Multani"))
-SCRIPTS.update(dict.fromkeys(range(0x1128f, 0x1129e), "Multani"))
-SCRIPTS.update(dict.fromkeys(range(0x1129f, 0x112aa), "Multani"))
-SCRIPTS.update(dict.fromkeys(range(0x10c80, 0x10cb3), "Old_Hungarian"))
-SCRIPTS.update(dict.fromkeys(range(0x10cc0, 0x10cf3), "Old_Hungarian"))
-SCRIPTS.update(dict.fromkeys(range(0x10cfa, 0x10d00), "Old_Hungarian"))
-SCRIPTS.update(dict.fromkeys(range(0x1d800, 0x1da8c), "SignWriting"))
-SCRIPTS.update(dict.fromkeys(range(0x1da9b, 0x1daa0), "SignWriting"))
-SCRIPTS.update(dict.fromkeys(range(0x1daa1, 0x1dab0), "SignWriting"))
-SCRIPTS.update(dict.fromkeys(range(0x1e900, 0x1e94c), "Adlam"))
-SCRIPTS.update(dict.fromkeys(range(0x1e950, 0x1e95a), "Adlam"))
-SCRIPTS.update(dict.fromkeys(range(0x1e95e, 0x1e960), "Adlam"))
-SCRIPTS.update(dict.fromkeys(range(0x11c00, 0x11c09), "Bhaiksuki"))
-SCRIPTS.update(dict.fromkeys(range(0x11c0a, 0x11c37), "Bhaiksuki"))
-SCRIPTS.update(dict.fromkeys(range(0x11c38, 0x11c46), "Bhaiksuki"))
-SCRIPTS.update(dict.fromkeys(range(0x11c50, 0x11c6d), "Bhaiksuki"))
-SCRIPTS.update(dict.fromkeys(range(0x11c70, 0x11c90), "Marchen"))
-SCRIPTS.update(dict.fromkeys(range(0x11c92, 0x11ca8), "Marchen"))
-SCRIPTS.update(dict.fromkeys(range(0x11ca9, 0x11cb7), "Marchen"))
-SCRIPTS.update(dict.fromkeys(range(0x11400, 0x1145c), "Newa"))
-SCRIPTS.update(dict.fromkeys(range(0x1145d, 0x11462), "Newa"))
-SCRIPTS.update(dict.fromkeys(range(0x104b0, 0x104d4), "Osage"))
-SCRIPTS.update(dict.fromkeys(range(0x104d8, 0x104fc), "Osage"))
-SCRIPTS[0x16fe0] = "Tangut"
-SCRIPTS.update(dict.fromkeys(range(0x17000, 0x187f8), "Tangut"))
-SCRIPTS.update(dict.fromkeys(range(0x18800, 0x18b00), "Tangut"))
-SCRIPTS.update(dict.fromkeys(range(0x18d00, 0x18d09), "Tangut"))
-SCRIPTS.update(dict.fromkeys(range(0x11d00, 0x11d07), "Masaram_Gondi"))
-SCRIPTS.update(dict.fromkeys(range(0x11d08, 0x11d0a), "Masaram_Gondi"))
-SCRIPTS.update(dict.fromkeys(range(0x11d0b, 0x11d37), "Masaram_Gondi"))
-SCRIPTS[0x11d3a] = "Masaram_Gondi"
-SCRIPTS.update(dict.fromkeys(range(0x11d3c, 0x11d3e), "Masaram_Gondi"))
-SCRIPTS.update(dict.fromkeys(range(0x11d3f, 0x11d48), "Masaram_Gondi"))
-SCRIPTS.update(dict.fromkeys(range(0x11d50, 0x11d5a), "Masaram_Gondi"))
-SCRIPTS[0x16fe1] = "Nushu"
-SCRIPTS.update(dict.fromkeys(range(0x1b170, 0x1b2fc), "Nushu"))
-SCRIPTS.update(dict.fromkeys(range(0x11a50, 0x11aa3), "Soyombo"))
-SCRIPTS.update(dict.fromkeys(range(0x11a00, 0x11a48), "Zanabazar_Square"))
-SCRIPTS.update(dict.fromkeys(range(0x11800, 0x1183c), "Dogra"))
-SCRIPTS.update(dict.fromkeys(range(0x11d60, 0x11d66), "Gunjala_Gondi"))
-SCRIPTS.update(dict.fromkeys(range(0x11d67, 0x11d69), "Gunjala_Gondi"))
-SCRIPTS.update(dict.fromkeys(range(0x11d6a, 0x11d8f), "Gunjala_Gondi"))
-SCRIPTS.update(dict.fromkeys(range(0x11d90, 0x11d92), "Gunjala_Gondi"))
-SCRIPTS.update(dict.fromkeys(range(0x11d93, 0x11d99), "Gunjala_Gondi"))
-SCRIPTS.update(dict.fromkeys(range(0x11da0, 0x11daa), "Gunjala_Gondi"))
-SCRIPTS.update(dict.fromkeys(range(0x11ee0, 0x11ef9), "Makasar"))
-SCRIPTS.update(dict.fromkeys(range(0x16e40, 0x16e9b), "Medefaidrin"))
-SCRIPTS.update(dict.fromkeys(range(0x10d00, 0x10d28), "Hanifi_Rohingya"))
-SCRIPTS.update(dict.fromkeys(range(0x10d30, 0x10d3a), "Hanifi_Rohingya"))
-SCRIPTS.update(dict.fromkeys(range(0x10f30, 0x10f5a), "Sogdian"))
-SCRIPTS.update(dict.fromkeys(range(0x10f00, 0x10f28), "Old_Sogdian"))
-SCRIPTS.update(dict.fromkeys(range(0x10fe0, 0x10ff7), "Elymaic"))
-SCRIPTS.update(dict.fromkeys(range(0x119a0, 0x119a8), "Nandinagari"))
-SCRIPTS.update(dict.fromkeys(range(0x119aa, 0x119d8), "Nandinagari"))
-SCRIPTS.update(dict.fromkeys(range(0x119da, 0x119e5), "Nandinagari"))
-SCRIPTS.update(dict.fromkeys(range(0x1e100, 0x1e12d), "Nyiakeng_Puachue_Hmong"))
-SCRIPTS.update(dict.fromkeys(range(0x1e130, 0x1e13e), "Nyiakeng_Puachue_Hmong"))
-SCRIPTS.update(dict.fromkeys(range(0x1e140, 0x1e14a), "Nyiakeng_Puachue_Hmong"))
-SCRIPTS.update(dict.fromkeys(range(0x1e14e, 0x1e150), "Nyiakeng_Puachue_Hmong"))
-SCRIPTS.update(dict.fromkeys(range(0x1e2c0, 0x1e2fa), "Wancho"))
-SCRIPTS[0x1e2ff] = "Wancho"
-SCRIPTS.update(dict.fromkeys(range(0x10fb0, 0x10fcc), "Chorasmian"))
-SCRIPTS.update(dict.fromkeys(range(0x11900, 0x11907), "Dives_Akuru"))
-SCRIPTS[0x11909] = "Dives_Akuru"
-SCRIPTS.update(dict.fromkeys(range(0x1190c, 0x11914), "Dives_Akuru"))
-SCRIPTS.update(dict.fromkeys(range(0x11915, 0x11917), "Dives_Akuru"))
-SCRIPTS.update(dict.fromkeys(range(0x11918, 0x11936), "Dives_Akuru"))
-SCRIPTS.update(dict.fromkeys(range(0x11937, 0x11939), "Dives_Akuru"))
-SCRIPTS.update(dict.fromkeys(range(0x1193b, 0x11947), "Dives_Akuru"))
-SCRIPTS.update(dict.fromkeys(range(0x11950, 0x1195a), "Dives_Akuru"))
-SCRIPTS[0x16fe4] = "Khitan_Small_Script"
-SCRIPTS.update(dict.fromkeys(range(0x18b00, 0x18cd6), "Khitan_Small_Script"))
-SCRIPTS.update(dict.fromkeys(range(0x10e80, 0x10eaa), "Yezidi"))
-SCRIPTS.update(dict.fromkeys(range(0x10eab, 0x10eae), "Yezidi"))
-SCRIPTS.update(dict.fromkeys(range(0x10eb0, 0x10eb2), "Yezidi"))
-SCRIPTS.update(dict.fromkeys(range(0x12f90, 0x12ff3), "Cypro_Minoan"))
-SCRIPTS.update(dict.fromkeys(range(0x10f70, 0x10f8a), "Old_Uyghur"))
-SCRIPTS.update(dict.fromkeys(range(0x16a70, 0x16abf), "Tangsa"))
-SCRIPTS.update(dict.fromkeys(range(0x16ac0, 0x16aca), "Tangsa"))
-SCRIPTS.update(dict.fromkeys(range(0x1e290, 0x1e2af), "Toto"))
-SCRIPTS.update(dict.fromkeys(range(0x10570, 0x1057b), "Vithkuqi"))
-SCRIPTS.update(dict.fromkeys(range(0x1057c, 0x1058b), "Vithkuqi"))
-SCRIPTS.update(dict.fromkeys(range(0x1058c, 0x10593), "Vithkuqi"))
-SCRIPTS.update(dict.fromkeys(range(0x10594, 0x10596), "Vithkuqi"))
-SCRIPTS.update(dict.fromkeys(range(0x10597, 0x105a2), "Vithkuqi"))
-SCRIPTS.update(dict.fromkeys(range(0x105a3, 0x105b2), "Vithkuqi"))
-SCRIPTS.update(dict.fromkeys(range(0x105b3, 0x105ba), "Vithkuqi"))
-SCRIPTS.update(dict.fromkeys(range(0x105bb, 0x105bd), "Vithkuqi"))
-SCRIPTS.update(dict.fromkeys(range(0x11f00, 0x11f11), "Kawi"))
-SCRIPTS.update(dict.fromkeys(range(0x11f12, 0x11f3b), "Kawi"))
-SCRIPTS.update(dict.fromkeys(range(0x11f3e, 0x11f5a), "Kawi"))
-SCRIPTS.update(dict.fromkeys(range(0x1e4d0, 0x1e4fa), "Nag_Mundari"))
+def get_script(codePoint, default="Common"):
+	"""Return the Unicode script name for a code point, or default if unlisted."""
+	index = bisect_right(_STARTS, codePoint) - 1
+	if index >= 0:
+		first, last, name = _RANGES[index]
+		if first <= codePoint <= last:
+			return name
+	return default

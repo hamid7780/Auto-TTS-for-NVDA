@@ -7,7 +7,6 @@ import re
 
 try:
 	import wx
-	import gui
 	from gui import guiHelper
 	from gui.settingsDialogs import SettingsPanel
 	import config
@@ -175,11 +174,11 @@ SAMPLE_TEXTS: Dict[str, str] = {
 	"de": "Dies ist eine Testnachricht für Auto TTS in NVDA.",
 	"ru": "Это тестовое сообщение для Auto TTS в NVDA.",
 	"zh": "这是 NVDA 自动语音转换的测试消息。",
-	"ja": "这是 NVDA Auto TTS のテストメッセージです。",
+	"ja": "これは NVDA Auto TTS のテストメッセージです。",
 	"ko": "NVDA 자동 음성 변환 테스트 메시지입니다.",
 	"tr": "Bu NVDA Auto TTS için bir test mesajıdır.",
 	"pt": "Esta é uma mensagem de teste para o Auto TTS no NVDA.",
-	"it": "Questo é un messaggio di test per Auto TTS in NVDA.",
+	"it": "Questo è un messaggio di test per Auto TTS in NVDA.",
 }
 
 NUMBER_MODES: List[Tuple[str, str]] = [

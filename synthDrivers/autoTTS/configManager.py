@@ -4,10 +4,10 @@
 import json
 import os
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
 
-from .languageDetection import DEFAULT_SCRIPT_MAPPINGS, normalize_language_code, get_base_language
+from .languageDetection import DEFAULT_SCRIPT_MAPPINGS, normalize_language_code
 
 try:
 	import config

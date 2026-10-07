@@ -6,10 +6,10 @@ voices while NVDA reads multilingual content.
 - Urdu/Arabic-aware and offline language detection.
 - Language lock, application exclusions, and settings import/export.
 
-Download **autoTTS-1.0.0.nvda-addon**, open the file and restart NVDA.
+Download **autoTTS-1.0.1.nvda-addon**, open the file and restart NVDA.
 Configure language profiles under **Preferences > Settings > Auto TTS**,
 then press **NVDA+Ctrl+S** and select **Auto TTS for NVDA**.
 
-Minimum NVDA version: **2023.3**. Last tested NVDA version: **2026.1.1**.
+Minimum NVDA version: **2023.3**. Last tested NVDA version: **2026.2**.
 
 Author: **Raja Hamid**.

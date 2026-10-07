@@ -5,7 +5,7 @@ body:
     id: versions
     attributes:
       label: NVDA and Auto TTS versions
-      placeholder: 'NVDA 2026.1.1; Auto TTS 1.0.0'
+      placeholder: 'NVDA 2026.2; Auto TTS 1.0.1'
     validations:
       required: true
   - type: textarea

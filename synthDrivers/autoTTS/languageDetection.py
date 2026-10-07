@@ -3,7 +3,7 @@
 
 import unicodedata
 import re
-from typing import Tuple, Optional, Dict, List
+from typing import Tuple, Optional, Dict
 
 try:
 	from speech.commands import LangChangeCommand, IndexCommand
@@ -21,7 +21,7 @@ except ImportError:
 		def __repr__(self):
 			return f"IndexCommand({self.index!r})"
 
-from .scripts import SCRIPTS
+from .scripts import get_script
 from . import statisticalDetection
 
 # Set of Urdu-exclusive characters that do NOT appear in standard Arabic text
@@ -276,7 +276,7 @@ def get_char_type(c: str, protect_math: bool = True) -> str:
 		return "math"
 	if category.startswith("P") or category.startswith("S"):
 		return "punct"
-	script = SCRIPTS.get(cp, "Common")
+	script = get_script(cp)
 	return script
 
 
@@ -386,12 +386,18 @@ def addDetectedLanguageCommands(
 
 			for unit in units:
 				counts = {}
+				# The Arabic-script decision depends on the whole unit, not on one
+				# character, so compute it once. Doing it per character made long
+				# lines quadratic (about 12 seconds for a 10,000 character line).
+				arabicCandidate = None
 				for c in unit:
 					ctype = get_char_type(c, protect_math=protectMathSymbols)
 					if ctype in ("mark", "space", "punct", "Common", "Inherited", "number"):
 						continue
 					if ctype == "Arabic":
-						candidate = classify_arabic_segment(unit, default_lang=defaultLang, current_lang=curLang) if smartUrduArabic else scriptSettings.get("Arabic", "ur")
+						if arabicCandidate is None:
+							arabicCandidate = classify_arabic_segment(unit, default_lang=defaultLang, current_lang=curLang) if smartUrduArabic else scriptSettings.get("Arabic", "ur")
+						candidate = arabicCandidate
 					elif ctype == "math":
 						candidate = mathLanguage if mathLanguage not in ("current", "default") else (curLang if mathLanguage == "current" else defaultLang)
 					else:

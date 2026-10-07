@@ -48,7 +48,8 @@ ends when NVDA restarts. NVDA's synthesizer settings ring can also change the
 selected profile's speech settings.</p>
 <h2>Applications and backups</h2>
 <p>Excluded applications use the default language without automatic switching.
-Some editors and terminals are excluded by default. Edit the exclusions list
+These are excluded by default: Visual Studio Code, Command Prompt, PowerShell,
+Windows Terminal, Visual Studio and Notepad++. Edit the exclusions list
 to enable switching in those applications.</p>
 <p>Use Export Settings to save language profiles and Import Settings to restore
 them. Language detection runs locally. Online synthesizers may require an
@@ -58,8 +59,16 @@ internet connection.</p>
 profile is enabled, language lock is off, and the application is not excluded.</p>
 <p><a href="https://github.com/hamid7780/autoTTS/issues">Report a problem</a>
 with your NVDA version, voices and steps to reproduce it.</p>
+<h2>Known limitations</h2>
+<ul>
+<li>Urdu written in English letters (Roman Urdu) is detected as English.</li>
+<li>Arabic-script text is separated into Urdu and Arabic only. Persian, Pashto
+and Sindhi text that uses letters shared with Urdu is read with the Urdu profile.</li>
+<li>Single short words in the same script are not guessed, to avoid constant voice
+changes. Clear script changes, such as Urdu to English, still switch on every word.</li>
+</ul>
 <h2>Compatibility and license</h2>
-<p>Version 1.0.0. Minimum NVDA: 2023.3. Last tested NVDA: 2026.1.1.
+<p>Version 1.0.1. Minimum NVDA: 2023.3. Last tested NVDA: 2026.2.
 Author: Raja Hamid.</p>
 <p>Licensed under GNU GPL version 2. See COPYING.txt and THIRD_PARTY_NOTICES.txt
 for license information.</p>

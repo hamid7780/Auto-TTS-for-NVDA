@@ -9,7 +9,6 @@ try:
 	from scriptHandler import script
 	import ui
 	import addonHandler
-	import languageHandler
 	import synthDriverHandler
 	from logHandler import log
 	addonHandler.initTranslation()
@@ -204,9 +203,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def script_toggleLanguageLock(self, gesture):
 		"""If locked, unlocks Auto TTS; if unlocked, opens profile lock dialog."""
 		if sharedConfig.lockedLanguage:
-			lockedWas = sharedConfig.lockedLanguage
 			sharedConfig.lockedLanguage = None
-			langName = _getLangName(lockedWas)
 			msg = _("Language lock disabled. Automatic switching resumed.")
 			try:
 				ui.message(msg)

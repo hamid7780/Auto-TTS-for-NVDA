@@ -16,8 +16,8 @@ For a new stable version:
 5. Create an annotated tag matching the manifest, for example:
 
    ```powershell
-   git tag -a v1.0.0 -m "Auto TTS 1.0.0"
-   git push origin v1.0.0
+   git tag -a v1.0.1 -m "Auto TTS 1.0.1"
+   git push origin v1.0.1
    ```
 
 GitHub Actions tests all three bundled runtime generations, builds the package
@@ -33,22 +33,22 @@ Follow the [official submission guide](https://github.com/nvaccess/addon-datasto
 and its [registration form](https://github.com/nvaccess/addon-datastore/issues/new?template=registerAddon.yml).
 First submissions require NV Access publisher approval and validation.
 
-Prepared values for this release:
+Values to enter for the current release (replace the version with the one in `manifest.ini`):
 
 | Field | Value |
 | --- | --- |
 | Add-on ID | `autoTTS` |
 | Display name | Auto TTS for NVDA |
-| Version | `1.0.0` |
+| Version | `1.0.1` |
 | Channel | `stable` |
 | Publisher account | `hamid7780` |
 | Author | Raja Hamid |
 | Source URL | https://github.com/hamid7780/autoTTS |
 | Homepage | https://github.com/hamid7780/autoTTS |
-| Direct download | https://github.com/hamid7780/autoTTS/releases/download/v1.0.0/autoTTS-1.0.0.nvda-addon |
+| Direct download | https://github.com/hamid7780/autoTTS/releases/download/v1.0.1/autoTTS-1.0.1.nvda-addon |
 | License | GPL-2.0, with bundled MIT and CC-BY-SA-3.0 components |
 | Minimum NVDA | `2023.3` |
-| Last tested NVDA | `2026.1.1` |
+| Last tested NVDA | `2026.2` |
 
 Use the checksum attached to the release if the form requests it. Verify that
 the compatibility versions are accepted in the store's current API list.

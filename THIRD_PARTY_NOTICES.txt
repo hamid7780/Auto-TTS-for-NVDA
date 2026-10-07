@@ -1,4 +1,4 @@
-Auto TTS 1.0.0 - Third-party notices
+Auto TTS 1.0.1 - Third-party notices
 =====================================
 
 fastText prediction runtime

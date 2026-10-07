@@ -5,7 +5,7 @@ import queue
 import importlib
 import itertools
 from collections import OrderedDict
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 try:
 	import wx
@@ -275,12 +275,6 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		default synth or the eSpeak fallback.
 		"""
 		return True
-
-	def _getActiveOrPreviewSynth(self):
-		"""Returns current active synth or default language synth."""
-		if self._synth is not None:
-			return self._synth
-		return self._getSynth(self._voice)
 
 	def _getSettingsLanguage(self):
 		"""Configured language explicitly selected in NVDA's settings ring."""

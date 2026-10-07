@@ -63,9 +63,11 @@ LANGUAGE_SCRIPT_HINTS = {
 	"Telugu": {"te"},
 }
 
+# A bare "/" only starts a protected path when it is not inside a word, so
+# ordinary text such as "and/or" or "km/h" is still language-detected.
 _PROTECTED_RE = re.compile(
 	r"(?:https?://|www\.|\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b|"
-	r"(?:[A-Za-z]:\\|/)[^\s]+|\b\w+\.(?:com|org|net|exe|dll|py|js|json|html)\b)",
+	r"(?:[A-Za-z]:\\|(?<!\w)/)[^\s]+|\b\w+\.(?:com|org|net|exe|dll|py|js|json|html)\b)",
 	re.IGNORECASE,
 )
 _WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
