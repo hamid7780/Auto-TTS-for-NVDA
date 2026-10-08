@@ -1,0 +1,15 @@
+name: Feature request
+description: Suggest an improvement to Auto TTS.
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you want to be able to do?
+      description: Describe the situation, for example the languages and applications you use.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could it work?
+      description: Optional. Share any idea you have.

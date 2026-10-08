@@ -31,6 +31,7 @@ class DriverPartitioningTests(unittest.TestCase):
 		self.synth._activeLanguage = "ur"
 		self.synth._synth = None
 		self.synth._synthCache = {}
+		self.synth._usedSynths = []
 		self.synth.speechQueue = queue.Queue()
 		self.synth._availableVoicesCache = {"ur": object(), "en": object()}
 		self.synth._markerCounter = itertools.count(1_500_000_000)
@@ -254,6 +255,57 @@ class DriverPartitioningTests(unittest.TestCase):
 			sharedConfig.load = oldLoad
 			driver.synthDriverHandler.changeVoice = oldChangeVoice
 		self.assertEqual(calls, [(self.synth, "ur")])
+
+
+class CancelOnlyStopsUsedSynthsTests(unittest.TestCase):
+	class FakeChild:
+		def __init__(self):
+			self.cancelled = 0
+
+		def cancel(self):
+			self.cancelled += 1
+
+	def makeDriver(self):
+		synth = driver.SynthDriver.__new__(driver.SynthDriver)
+		synth._voice = "en"
+		synth._isSpeaking = False
+		synth._activeLanguage = "en"
+		synth._synth = None
+		synth._synthCache = {}
+		synth._usedSynths = []
+		synth.speechQueue = queue.Queue()
+		synth._activeMarker = None
+		synth._activeChunkId = 0
+		synth._activeForwardIndices = set()
+		return synth
+
+	def test_cancel_skips_idle_cached_synths(self):
+		synth = self.makeDriver()
+		idle, used = self.FakeChild(), self.FakeChild()
+		synth._synthCache = {"idle": (idle, {}), "used": (used, {})}
+		synth._markSynthUsed(used)
+		synth._synth = used
+		synth.cancel()
+		self.assertEqual(idle.cancelled, 0)
+		self.assertEqual(used.cancelled, 1)
+
+	def test_used_synth_is_cancelled_once_then_forgotten(self):
+		synth = self.makeDriver()
+		child = self.FakeChild()
+		synth._markSynthUsed(child)
+		synth._markSynthUsed(child)
+		synth.cancel()
+		synth.cancel()
+		self.assertEqual(child.cancelled, 1)
+		self.assertEqual(synth._usedSynths, [])
+
+	def test_active_synth_is_always_cancelled(self):
+		synth = self.makeDriver()
+		child = self.FakeChild()
+		synth._synth = child
+		synth.cancel()
+		self.assertEqual(child.cancelled, 1)
+		self.assertIsNone(synth._synth)
 
 
 if __name__ == "__main__":

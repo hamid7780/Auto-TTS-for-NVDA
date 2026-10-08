@@ -902,6 +902,8 @@ class ProfileEditorDialog(wx.Dialog):
 					seq = [sampleText]
 				synth.speak(seq)
 				spoken = True
+				if activeWrapper and hasattr(activeWrapper, "_markSynthUsed"):
+					activeWrapper._markSynthUsed(synth)
 			except Exception as e:
 				log.error(f"AutoTTS: Error speaking preview sample with synth '{synthId}': {e}")
 

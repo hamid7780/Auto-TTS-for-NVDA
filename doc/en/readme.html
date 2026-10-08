@@ -1,78 +1,135 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Auto TTS for NVDA - User Guide</title>
-<style>
-body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 55rem; margin: 2rem auto; padding: 0 1rem; }
-table { border-collapse: collapse; width: 100%; }
-th, td { border: 1px solid #777; padding: .5rem; text-align: left; }
-</style>
+<title>Auto TTS for NVDA</title>
+<style>body{font-family:Segoe UI,Arial,sans-serif;max-width:48em;margin:1em auto;padding:0 1em;line-height:1.5}table{border-collapse:collapse;width:100%}caption{text-align:left;font-weight:bold;padding:.3em 0}th,td{border:1px solid #777;padding:.4em .6em;text-align:left;vertical-align:top}code{font-family:Consolas,monospace}</style>
 </head>
 <body>
-<main>
 <h1>Auto TTS for NVDA</h1>
-<p>Auto TTS automatically detects text language and switches between the voices
-selected for each language. It supports multilingual content, including Urdu,
-Arabic and English.</p>
-<h2>Setup</h2>
+<p>Version 1.0.2.</p>
+<p>Auto TTS is an add-on for the NVDA screen reader. It looks at the text NVDA is about to read, works out which language each part is written in, and reads each part with the voice you picked for that language. If you read Urdu, Arabic and English in the same page, message or document, you no longer have to change voices by hand.</p>
+<p><strong><a href="https://github.com/hamid7780/Auto-TTS-for-NVDA/releases/latest">Download the latest release</a></strong></p>
+<p>Needs NVDA 2023.3 or newer, 32-bit or 64-bit. Last tested with NVDA 2026.2. Free software under the GPL-2.0 license.</p>
+<h2>What it does</h2>
+<p>NVDA normally reads everything with one voice. When a text mixes languages, that voice reads some of it badly. With Auto TTS you create a profile for each language. A profile holds a synthesizer, a voice, and optionally its own speed, pitch and volume. While NVDA reads, Auto TTS splits the text by language and sends each piece to the matching profile.</p>
+<ul>
+<li>Every language can use a different synthesizer and voice, for example Windows OneCore for English and another synthesizer for Urdu.</li>
+<li>Language detection runs on your computer. Auto TTS does not send your text anywhere.</li>
+<li>Urdu and Arabic are told apart, including Quranic text with tashkeel.</li>
+<li>Numbers and math can be read in a language you choose.</li>
+<li>It includes a language lock, per application exclusions, and settings backup.</li>
+</ul>
+<h2>Install</h2>
 <ol>
-<li>Open NVDA menu, Preferences, Settings, Auto TTS.</li>
-<li>Add a profile for each language and select its synthesizer and voice.</li>
-<li>Choose your default language. Enable custom rate, pitch and volume if needed.</li>
-<li>Use Test Speech to check the voices, then save settings.</li>
-<li>Press NVDA+Ctrl+S and select Auto TTS for NVDA as the synthesizer.</li>
+<li>Download the <code>.nvda-addon</code> file from the <a href="https://github.com/hamid7780/Auto-TTS-for-NVDA/releases/latest">latest release</a>.</li>
+<li>Open the file and confirm the installation. Restart NVDA when it asks.</li>
+<li>After the restart, a welcome message offers to open the settings.</li>
 </ol>
-<p>Additional synthesizers and voices must be installed separately.</p>
-<h2>Language settings</h2>
-<p>Word-by-Word mode is suitable for mixed-language sentences. Sentence and line
-modes can reduce frequent voice changes. Choose Detect from text for automatic
-detection, or Trust document language tags to follow the document's settings.</p>
-<p>Offline detection uses enabled language profiles. Short or ambiguous text
-may keep the current language. Math and numbers can use the current language
-or another language selected in settings.</p>
+<h2>Set up your languages</h2>
+<p>Open the NVDA menu, then Preferences, Settings, and choose <strong>Auto TTS for NVDA</strong>. You can also press NVDA+Alt+A from anywhere.</p>
+<ol>
+<li>Choose <strong>Add Profile</strong>.</li>
+<li>Pick a language from the list, or type a language code such as <code>ur</code>, <code>ar</code> or <code>en-GB</code>.</li>
+<li>Choose the <strong>TTS Engine</strong> and the <strong>Voice</strong> for that language.</li>
+<li>Choose <strong>Test Speech</strong> to hear the voice.</li>
+<li>Repeat for every language you read.</li>
+<li>Select your main language in the profile list and choose <strong>Set as Default</strong>.</li>
+<li>Press NVDA+Ctrl+S, select <strong>Auto TTS for NVDA</strong> as your synthesizer, and press OK.</li>
+</ol>
+<p>The default language is used for text whose language is not clear, and in excluded applications.</p>
 <h2>Keyboard shortcuts</h2>
 <table>
-<caption>Default Auto TTS shortcuts</caption>
-<thead><tr><th scope="col">Shortcut</th><th scope="col">Action</th></tr></thead>
+<caption>Keyboard shortcuts</caption>
+<thead><tr>
+<th scope="col">Shortcut</th>
+<th scope="col">What it does</th>
+</tr></thead>
 <tbody>
-<tr><td>NVDA+Alt+A</td><td>Open Auto TTS settings.</td></tr>
-<tr><td>NVDA+Shift+L</td><td>Turn automatic language switching on or off.</td></tr>
-<tr><td>NVDA+Alt+L</td><td>Lock speech to a language or unlock it.</td></tr>
-<tr><td>NVDA+Ctrl+T</td><td>Announce Auto TTS status.</td></tr>
+<tr><td>NVDA+Alt+A</td><td>Open the Auto TTS settings</td></tr>
+<tr><td>NVDA+Shift+L</td><td>Turn automatic language switching on or off</td></tr>
+<tr><td>NVDA+Alt+L</td><td>Lock Auto TTS to one language profile, or unlock it</td></tr>
+<tr><td>NVDA+Ctrl+T</td><td>Say whether Auto TTS is on and whether a language is locked</td></tr>
 </tbody>
 </table>
-<p>Change shortcuts under Preferences, Input gestures, Auto TTS. Language lock
-ends when NVDA restarts. NVDA's synthesizer settings ring can also change the
-selected profile's speech settings.</p>
-<h2>Applications and backups</h2>
-<p>Excluded applications use the default language without automatic switching.
-These are excluded by default: Visual Studio Code, Command Prompt, PowerShell,
-Windows Terminal, Visual Studio and Notepad++. Edit the exclusions list
-to enable switching in those applications.</p>
-<p>Use Export Settings to save language profiles and Import Settings to restore
-them. Language detection runs locally. Online synthesizers may require an
-internet connection.</p>
-<h2>Support</h2>
-<p>If the wrong voice speaks, check that Auto TTS is selected, the language
-profile is enabled, language lock is off, and the application is not excluded.</p>
-<p><a href="https://github.com/hamid7780/autoTTS/issues">Report a problem</a>
-with your NVDA version, voices and steps to reproduce it.</p>
+<p>You can change these under Preferences, Input gestures, in the Auto TTS category. NVDA also uses NVDA+Ctrl+T to switch the braille tether, and add-on shortcuts take priority, so braille display users should assign a different key to the status command.</p>
+<h2>Settings</h2>
+<table>
+<caption>Settings</caption>
+<thead><tr>
+<th scope="col">Setting</th>
+<th scope="col">What it does</th>
+</tr></thead>
+<tbody>
+<tr><td>Enable Automatic Language Switching</td><td>Turns detection on or off. The same as NVDA+Shift+L.</td></tr>
+<tr><td>Use Unicode-based language detection</td><td>Chooses the language from the writing system of the text.</td></tr>
+<tr><td>Smart same-script language detection</td><td>Tells apart languages that share a script, such as English and French, using the bundled FastText model. Works offline.</td></tr>
+<tr><td>Smart Arabic/Urdu automatic separation</td><td>Separates Urdu from Arabic, and sends Quranic text with tashkeel to Arabic.</td></tr>
+<tr><td>Protect math symbols and formulas</td><td>Keeps math from triggering a voice change.</td></tr>
+<tr><td>Math reading language</td><td>The language used to read math.</td></tr>
+<tr><td>Document language tags</td><td>Either detect from the text even when the document tag is wrong, or trust the language tags a document provides.</td></tr>
+<tr><td>Switching granularity</td><td>Switch on every word, on every sentence or clause, or on every new line.</td></tr>
+<tr><td>Numbers reading voice / language</td><td>Read numbers in the current language, the default language, or always in English, Urdu, Arabic or Hindi.</td></tr>
+<tr><td>Excluded Applications</td><td>Programs where Auto TTS never switches voices.</td></tr>
+<tr><td>Configured Language Profiles</td><td>Add, edit and remove profiles, set the default, or reset everything.</td></tr>
+<tr><td>Export Settings and Import Settings</td><td>Save or restore all profiles and options as a <code>.autotts</code> or <code>.json</code> file.</td></tr>
+</tbody>
+</table>
+<h3>Profile options</h3>
+<p>Each language profile has these options.</p>
+<ul>
+<li><strong>Language</strong>: a language from the list, or any language code such as <code>sw-KE</code> or <code>fil-PH</code>.</li>
+<li><strong>TTS Engine</strong> and <strong>Voice</strong>: the synthesizer and voice for this language. Any synthesizer that NVDA lists can be used.</li>
+<li><strong>Send language information to synthesizer</strong>: tells the synthesizer which language it is reading, which some voices need.</li>
+<li><strong>Enable this language profile for automatic switching</strong>: turn it off to keep a profile without using it.</li>
+<li><strong>NVDA Profile</strong>: take the speed, pitch and volume of the synthesizer from one of your NVDA configuration profiles, or leave it on none to use the synthesizer's normal settings.</li>
+<li><strong>Use custom rate, pitch and volume</strong>: give this language its own speed, pitch and volume.</li>
+<li><strong>Test Speech</strong>: speaks a sample sentence in this language.</li>
+</ul>
+<h2>How language is detected</h2>
+<p>Detection works in three steps.</p>
+<ol>
+<li><strong>Writing system.</strong> Each script is linked to a language. By default Latin letters go to English, Arabic script to Urdu, Devanagari to Hindi, Cyrillic to Russian, and so on.</li>
+<li><strong>Urdu and Arabic.</strong> Arabic script is shared by both languages, so Auto TTS looks for letters and marks that only one of them uses. Quranic text and tashkeel go to Arabic.</li>
+<li><strong>Languages that share a script.</strong> For text in the same script, such as English, French and German, a small offline FastText model picks the language. It only chooses among languages that have an enabled profile, and it skips fragments shorter than two words.</li>
+</ol>
+<p>Text in a language that has no enabled profile is read with the default voice.</p>
+<h2>Excluded applications</h2>
+<p>In an excluded application, Auto TTS does not switch voices and reads everything with your default language. These programs are excluded by default: Visual Studio Code, Command Prompt, PowerShell, Windows Terminal, Visual Studio and Notepad++. Open <strong>Excluded Applications</strong> in the settings to add or remove programs. Type the program name, for example <code>notepad.exe</code>. The <code>.exe</code> ending is added if you leave it out.</p>
+<h2>Language lock</h2>
+<p>Press NVDA+Alt+L to read everything with one language profile, whatever the text says. Press it again to go back to automatic switching. The lock is cleared when NVDA restarts.</p>
+<h2>Synthesizer settings ring</h2>
+<p>In NVDA's synthesizer settings ring, the Voice setting moves between your language profiles. Rate, pitch and volume change the speed, pitch and volume used for the selected profile.</p>
+<h2>Backup and where settings are kept</h2>
+<p>Use <strong>Export Settings</strong> to back up your profiles or to copy them to another computer, and <strong>Import Settings</strong> to restore them. Settings are stored in the NVDA user configuration folder, usually <code>%APPDATA%\nvda</code>, in <code>addons\autoTTS.json</code>. A copy named <code>autoTTS.json.bak</code> is kept next to it.</p>
+<h2>If something does not work</h2>
+<ol>
+<li>Check that <strong>Auto TTS for NVDA</strong> is the selected synthesizer (NVDA+Ctrl+S).</li>
+<li>Press NVDA+Ctrl+T to hear whether Auto TTS is on or locked to a language.</li>
+<li>Open the profile for the language and check that it is enabled and that <strong>Test Speech</strong> works.</li>
+<li>Check that the program you are using is not in the excluded list.</li>
+<li>Check that the voice named in the profile is still installed.</li>
+</ol>
+<p>If you report a problem, include the NVDA log. Open it with NVDA+F1. Lines from this add-on start with <code>AutoTTS:</code>. For a report about speech starting late, set the logging level to Debug in NVDA's General settings, reproduce the problem, and include the lines that say <code>took</code>.</p>
 <h2>Known limitations</h2>
 <ul>
 <li>Urdu written in English letters (Roman Urdu) is detected as English.</li>
-<li>Arabic-script text is separated into Urdu and Arabic only. Persian, Pashto
-and Sindhi text that uses letters shared with Urdu is read with the Urdu profile.</li>
-<li>Single short words in the same script are not guessed, to avoid constant voice
-changes. Clear script changes, such as Urdu to English, still switch on every word.</li>
+<li>Arabic script is separated into Urdu and Arabic only. Persian, Pashto and Sindhi text that uses letters shared with Urdu is read with the Urdu profile.</li>
+<li>A single short word in a shared script is not guessed, to avoid constant voice changes. A clear change of script, such as Urdu to English, still switches on that word.</li>
+<li>Online synthesizers need an internet connection, and Auto TTS cannot make them faster.</li>
 </ul>
-<h2>Compatibility and license</h2>
-<p>Version 1.0.1. Minimum NVDA: 2023.3. Last tested NVDA: 2026.2.
-Author: Raja Hamid.</p>
-<p>Licensed under GNU GPL version 2. See COPYING.txt and THIRD_PARTY_NOTICES.txt
-for license information.</p>
-<p><a href="https://github.com/hamid7780/autoTTS">Project homepage</a>.</p>
-</main>
+<h2>Privacy</h2>
+<p>Language detection runs on your computer and the add-on has no network code. If you choose an online synthesizer for a language, that synthesizer sends the text it reads to its own service. That is controlled by the synthesizer, not by Auto TTS.</p>
+<h2>Report a problem or contribute</h2>
+<p>Report bugs and suggestions on the <a href="https://github.com/hamid7780/Auto-TTS-for-NVDA/issues">issue tracker</a>. Developers can find build and test steps in the <a href="https://github.com/hamid7780/Auto-TTS-for-NVDA/blob/main/docs/DEVELOPMENT.md">development notes</a>.</p>
+<h2>Credits and licenses</h2>
+<p>Auto TTS is written by Raja Hamid and released under the <a href="https://github.com/hamid7780/Auto-TTS-for-NVDA/blob/main/LICENSE.txt">GPL-2.0 license</a>. It bundles the fastText prediction runtime (MIT license) and the fastText language identification model, which is licensed separately under CC BY-SA 3.0. See the <a href="https://github.com/hamid7780/Auto-TTS-for-NVDA/blob/main/THIRD_PARTY_NOTICES.txt">third-party notices</a>.</p>
+<div dir="rtl" lang="ur">
+<h2>اردو میں مختصر تعارف</h2>
+<p>Auto TTS for NVDA ایک ایڈ آن ہے جو پڑھے جانے والے متن کی زبان خود پہچانتا ہے اور ہر زبان کے لیے آپ کی منتخب کردہ آواز استعمال کرتا ہے۔ اردو، عربی اور انگریزی ملی ہوئی عبارت پڑھتے وقت آواز خود بدل جاتی ہے۔</p>
+<p>ہر زبان کے لیے آپ الگ سنتھیسائزر، آواز، رفتار، پچ اور والیوم چن سکتے ہیں۔ زبان کی پہچان آپ کے اپنے کمپیوٹر پر ہوتی ہے۔ البتہ آن لائن سنتھیسائزر کو انٹرنیٹ درکار ہو سکتا ہے۔</p>
+<p>انسٹال کرنے کے لیے ریلیز کے صفحے سے <code>.nvda-addon</code> فائل ڈاؤن لوڈ کریں، اسے کھولیں اور NVDA دوبارہ شروع کریں۔ پھر NVDA+Alt+A دبا کر ہر زبان کے لیے پروفائل بنائیں، اور NVDA+Ctrl+S سے Auto TTS for NVDA کو اپنا سنتھیسائزر منتخب کریں۔</p>
+</div>
 </body>
 </html>

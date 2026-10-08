@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.2
+
+- Cancelling speech now stops only the voices that were speaking. Before, every cached voice was stopped on every key press, which could add a small delay.
+- Calls that take longer than 3 ms are written to the NVDA log at debug level, so reports of late speech can be traced.
+- Rewrote the user guide. The help page inside NVDA is now generated from the README.
+- Added a feature request form and a log field to the bug report form.
+- The project moved to https://github.com/hamid7780/Auto-TTS-for-NVDA.
+
 ## 1.0.1
 
 - Fixed a long freeze when reading very long Arabic-script lines in line or sentence mode.

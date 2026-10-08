@@ -2,22 +2,24 @@
 
 ## GitHub releases
 
-The source repository is https://github.com/hamid7780/autoTTS. Installable
+The source repository is https://github.com/hamid7780/Auto-TTS-for-NVDA. Installable
 packages are attached to releases rather than committed to source history.
 
 For a new stable version:
 
 1. Update the version, description/changelog and compatibility fields in
    `manifest.ini`, keeping `updateChannel = stable`.
-2. Update README, bundled HTML help, third-party notice heading, changelog and
-   `RELEASE_NOTES.md` for the new version.
+2. Update `README.md` if the behaviour changed, then run `python tools/make_help.py`
+   to rebuild the bundled help page. Update the third-party notice heading,
+   `CHANGELOG.md`, and the "What's new" part of `RELEASE_NOTES.md`. The release
+   page shows `RELEASE_NOTES.md` as it is.
 3. Run the regression suite and test the add-on in the intended NVDA versions.
 4. Commit and push the changes to `main`.
 5. Create an annotated tag matching the manifest, for example:
 
    ```powershell
-   git tag -a v1.0.1 -m "Auto TTS 1.0.1"
-   git push origin v1.0.1
+   git tag -a v1.0.2 -m "Auto TTS 1.0.2"
+   git push origin v1.0.2
    ```
 
 GitHub Actions tests all three bundled runtime generations, builds the package
@@ -39,13 +41,13 @@ Values to enter for the current release (replace the version with the one in `ma
 | --- | --- |
 | Add-on ID | `autoTTS` |
 | Display name | Auto TTS for NVDA |
-| Version | `1.0.1` |
+| Version | `1.0.2` |
 | Channel | `stable` |
 | Publisher account | `hamid7780` |
 | Author | Raja Hamid |
-| Source URL | https://github.com/hamid7780/autoTTS |
-| Homepage | https://github.com/hamid7780/autoTTS |
-| Direct download | https://github.com/hamid7780/autoTTS/releases/download/v1.0.1/autoTTS-1.0.1.nvda-addon |
+| Source URL | https://github.com/hamid7780/Auto-TTS-for-NVDA |
+| Homepage | https://github.com/hamid7780/Auto-TTS-for-NVDA |
+| Direct download | https://github.com/hamid7780/Auto-TTS-for-NVDA/releases/download/v1.0.2/autoTTS-1.0.2.nvda-addon |
 | License | GPL-2.0, with bundled MIT and CC-BY-SA-3.0 components |
 | Minimum NVDA | `2023.3` |
 | Last tested NVDA | `2026.2` |

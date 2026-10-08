@@ -4,6 +4,7 @@
 import queue
 import importlib
 import itertools
+import time
 from collections import OrderedDict
 from typing import Dict, Any
 
@@ -167,6 +168,20 @@ def _buildSupportedSettings():
 	return tuple(settings)
 
 
+# Calls slower than this are written to the NVDA log at debug level so that a
+# report of "speech starts late" can be traced to the step that is responsible.
+_SLOW_CALL_MS = 3.0
+
+
+def _logIfSlow(what, startedAt, detail=""):
+	elapsed = (time.perf_counter() - startedAt) * 1000.0
+	if elapsed >= _SLOW_CALL_MS:
+		try:
+			log.debug(f"AutoTTS: {what} took {elapsed:.1f} ms {detail}".rstrip())
+		except Exception:
+			pass
+
+
 class SynthDriver(synthDriverHandler.SynthDriver):
 	name = "autoTTS"
 	description = _("Auto TTS for NVDA")
@@ -175,6 +190,9 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 
 	def __init__(self):
 		self._synthCache: Dict[str, Any] = {}
+		# Child synths that have been given speech since the last cancel. Only these
+		# can still be making sound, so cancel() does not have to stop idle ones.
+		self._usedSynths = []
 		self._synth = None
 		self._isSpeaking = False
 		self.speechQueue = queue.Queue()
@@ -422,9 +440,17 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		elif index in self._activeForwardIndices:
 			synthIndexReached.notify(synth=self, index=index)
 
+	def _markSynthUsed(self, synth):
+		"""Remember that a child synth may be producing audio until the next cancel."""
+		if synth is not None and not any(used is synth for used in self._usedSynths):
+			self._usedSynths.append(synth)
+
 	def _startChunk(self, lang, speechSequence):
 		self._activeLanguage = lang
+		startedAt = time.perf_counter()
 		self._synth = self._getSynth(lang)
+		_logIfSlow("preparing the voice", startedAt, f"(language {lang})")
+		self._markSynthUsed(self._synth)
 		if self._synth is None:
 			# Skip a broken language route instead of leaving the complete queue stuck.
 			self._processNextChunkOrFinish()
@@ -671,6 +697,13 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		return synth
 
 	def speak(self, speechSequence):
+		startedAt = time.perf_counter()
+		try:
+			self._speak(speechSequence)
+		finally:
+			_logIfSlow("speak", startedAt)
+
+	def _speak(self, speechSequence):
 		"""
 		Processes incoming speech sequence, checks language lock and application bypass,
 		segments multi-language text, and routes chunks to synthesizers.
@@ -840,20 +873,22 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		self._activeMarker = None
 		self._activeForwardIndices.clear()
 
-		for cachedSynth, _ in list(self._synthCache.values()):
-			try:
-				cachedSynth.cancel()
-			except Exception:
-				pass
-
+		# Stopping an audio device costs time on every key press, so only the child
+		# synths which were actually given speech since the last cancel are stopped.
+		startedAt = time.perf_counter()
+		used = self._usedSynths
+		self._usedSynths = []
 		active = self._synth
-		if active is not None:
+		if active is not None and not any(item is active for item in used):
+			used.append(active)
+		for childSynth in used:
 			try:
-				active.cancel()
+				childSynth.cancel()
 			except Exception:
 				pass
 
 		self._synth = None
+		_logIfSlow("cancel", startedAt, f"({len(used)} synths)")
 
 	def _getAvailableVoices(self):
 		"""Return only Auto TTS profiles as languages in NVDA's settings ring."""

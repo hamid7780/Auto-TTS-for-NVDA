@@ -5,7 +5,7 @@ body:
     id: versions
     attributes:
       label: NVDA and Auto TTS versions
-      placeholder: 'NVDA 2026.2; Auto TTS 1.0.1'
+      placeholder: 'NVDA 2026.2; Auto TTS 1.0.2'
     validations:
       required: true
   - type: textarea
@@ -28,3 +28,8 @@ body:
       label: Expected and actual behavior
     validations:
       required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: NVDA log (optional)
+      description: Open it with NVDA+F1. Lines from this add-on start with AutoTTS. For late speech, set the logging level to Debug first and include the lines that say "took". Remove private text.
