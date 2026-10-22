@@ -60,6 +60,9 @@ You can change these under Preferences, Input gestures, in the Auto TTS category
 | Document language tags | Either detect from the text even when the document tag is wrong, or trust the language tags a document provides. |
 | Switching granularity | Switch on every word, on every sentence or clause, or on every new line. |
 | Numbers reading voice / language | Read numbers in the current language, the default language, or always in English, Urdu, Arabic or Hindi. |
+| Mobile phone number pattern | Read mobile numbers as spaced digits, grouped clusters, or normal text. |
+| Large numbers format | Read large numbers in default/Western system (Millions, Billions) or Indian numbering system (Lakh, Crore). |
+| Diagnostic activity logging | Record speech events and synthesizer actions to Auto TTS log.txt in Documents. |
 | Excluded Applications | Programs where Auto TTS never switches voices. |
 | Configured Language Profiles | Add, edit and remove profiles, set the default, or reset everything. |
 | Export Settings and Import Settings | Save or restore all profiles and options as a `.autotts` or `.json` file. |
@@ -82,7 +85,7 @@ Detection works in three steps.
 
 1. **Writing system.** Each script is linked to a language. By default Latin letters go to English, Arabic script to Urdu, Devanagari to Hindi, Cyrillic to Russian, and so on.
 2. **Urdu and Arabic.** Arabic script is shared by both languages, so Auto TTS looks for letters and marks that only one of them uses. Quranic text and tashkeel go to Arabic.
-3. **Languages that share a script.** For text in the same script, such as English, French and German, a small offline FastText model picks the language. It only chooses among languages that have an enabled profile, and it skips fragments shorter than two words.
+3. **Languages that share a script.** For text in the same script, such as English, French and German, a small offline FastText model picks the language. Regional shared scripts like Perso-Arabic (Urdu, Arabic, Persian), Devanagari (Hindi, Marathi, Nepali), and Bengali/Assamese use character heuristics and dedicated n-gram language models.
 
 Text in a language that has no enabled profile is read with the default voice.
 
@@ -110,12 +113,11 @@ Use **Export Settings** to back up your profiles or to copy them to another comp
 4. Check that the program you are using is not in the excluded list.
 5. Check that the voice named in the profile is still installed.
 
-If you report a problem, include the NVDA log. Open it with NVDA+F1. Lines from this add-on start with `AutoTTS:`. For a report about speech starting late, set the logging level to Debug in NVDA's General settings, reproduce the problem, and include the lines that say `took`.
+If you report a problem, include the NVDA log. Open it with NVDA+F1. Lines from this add-on start with `AutoTTS:`. For a report about speech starting late, set the logging level to Debug in NVDA's General settings, reproduce the problem, and include the lines that say `took`. You can also open the Auto TTS log folder from settings.
 
 ## Known limitations
 
 - Urdu written in English letters (Roman Urdu) is detected as English.
-- Arabic script is separated into Urdu and Arabic only. Persian, Pashto and Sindhi text that uses letters shared with Urdu is read with the Urdu profile.
 - A single short word in a shared script is not guessed, to avoid constant voice changes. A clear change of script, such as Urdu to English, still switches on that word.
 - Online synthesizers need an internet connection, and Auto TTS cannot make them faster.
 

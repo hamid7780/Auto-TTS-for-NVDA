@@ -112,6 +112,12 @@ class AutoTTSConfig:
 		self.defaultLang: str = ""
 		self.smartUrduArabic: bool = True
 		self.numberMode: str = "current"
+		self.mobilePattern: str = "5-5"
+		self.longNumberMode: str = "group_5"
+		self.longNumberMinDigits: int = 10
+		self.croreLakhEnabled: bool = True
+		self.loggingEnabled: bool = True
+		self.logIncludeText: bool = False
 		self.useUnicodeLanguageDetection: bool = True
 		self.useStatisticalLanguageDetection: bool = True
 		self.granularityMode: str = "word"  # "word", "sentence", "line"
@@ -125,6 +131,14 @@ class AutoTTSConfig:
 		self.scriptMapping: Dict[str, str] = dict(DEFAULT_SCRIPT_MAPPINGS)
 		self.load()
 
+	@property
+	def largeNumberFormat(self) -> str:
+		return "indian" if self.croreLakhEnabled else "western"
+
+	@largeNumberFormat.setter
+	def largeNumberFormat(self, val: str):
+		self.croreLakhEnabled = (val == "indian")
+
 	def _toFullDict(self) -> Dict[str, Any]:
 		"""Serializes entire config to a plain dict for JSON storage."""
 		return {
@@ -132,6 +146,13 @@ class AutoTTSConfig:
 			"defaultLang": self.defaultLang,
 			"smartUrduArabic": self.smartUrduArabic,
 			"numberMode": self.numberMode,
+			"mobilePattern": self.mobilePattern,
+			"longNumberMode": self.longNumberMode,
+			"longNumberMinDigits": self.longNumberMinDigits,
+			"croreLakhEnabled": self.croreLakhEnabled,
+			"largeNumberFormat": self.largeNumberFormat,
+			"loggingEnabled": self.loggingEnabled,
+			"logIncludeText": self.logIncludeText,
 			"useUnicodeLanguageDetection": self.useUnicodeLanguageDetection,
 			"useStatisticalLanguageDetection": self.useStatisticalLanguageDetection,
 			"granularityMode": self.granularityMode,
@@ -160,6 +181,15 @@ class AutoTTSConfig:
 		self.defaultLang = str(data.get("defaultLang", ""))
 		self.smartUrduArabic = bool(data.get("smartUrduArabic", True))
 		self.numberMode = str(data.get("numberMode", "current"))
+		self.mobilePattern = str(data.get("mobilePattern", "5-5"))
+		self.longNumberMode = str(data.get("longNumberMode", "group_5"))
+		self.longNumberMinDigits = int(data.get("longNumberMinDigits", 10))
+		if "largeNumberFormat" in data:
+			self.croreLakhEnabled = (data["largeNumberFormat"] == "indian")
+		else:
+			self.croreLakhEnabled = bool(data.get("croreLakhEnabled", True))
+		self.loggingEnabled = bool(data.get("loggingEnabled", True))
+		self.logIncludeText = bool(data.get("logIncludeText", False))
 		self.useUnicodeLanguageDetection = bool(data.get("useUnicodeLanguageDetection", True))
 		self.useStatisticalLanguageDetection = bool(data.get("useStatisticalLanguageDetection", True))
 		self.granularityMode = str(data.get("granularityMode", "word"))

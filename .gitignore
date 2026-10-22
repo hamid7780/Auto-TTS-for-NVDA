@@ -12,5 +12,6 @@ venv/
 autoTTS.json*
 *.autotts
 tests/autoTTS-test-*
+NVDA All In One*
 .DS_Store
 Thumbs.db

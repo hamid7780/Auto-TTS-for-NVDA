@@ -5,8 +5,9 @@ import queue
 import importlib
 import itertools
 import time
+import threading
 from collections import OrderedDict
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 try:
 	import wx
@@ -28,6 +29,7 @@ try:
 		CharacterModeCommand,
 		PitchCommand,
 		LangChangeCommand,
+		BaseProsodyCommand,
 	)
 	from logHandler import log
 	addonHandler.initTranslation()
@@ -46,6 +48,8 @@ except ImportError:
 	class BooleanDriverSetting(DriverSetting):
 		def __init__(self, id, name, availableInSettingsRing=True):
 			super().__init__(id, name, availableInSettingsRing=availableInSettingsRing)
+	class BaseProsodyCommand:
+		defaultValue = property(lambda self: 50)
 	class synthDriverHandler:
 		class SynthDriver:
 			VoiceSetting = DriverSetting
@@ -79,6 +83,8 @@ except ImportError:
 				synth.voice = voice
 		@staticmethod
 		def getSynthList(): return [("espeak", "eSpeak NG")]
+		@staticmethod
+		def getSynth(): return None
 	class IndexCommand:
 		def __init__(self, index=0): self.index = index
 	class CharacterModeCommand: pass
@@ -111,12 +117,17 @@ except ImportError:
 	def _(s): return s
 
 from . import languageDetection
+from . import numberProcessing
+from . import activityLog
+from . import voiceMatch
 from .configManager import sharedConfig
+
+VIRTUAL_SYNTHS = voiceMatch.VIRTUAL_SYNTHS
 
 
 def _getSynthInstance(name: str):
 	"""Imports and instantiates an underlying NVDA synth driver by name."""
-	if not name:
+	if not name or name in VIRTUAL_SYNTHS:
 		name = "espeak"
 	return importlib.import_module(f"synthDrivers.{name}", package="synthDrivers").SynthDriver()
 
@@ -128,7 +139,12 @@ def _isForegroundAppExcluded() -> bool:
 		if obj and hasattr(obj, "appModule"):
 			appName = getattr(obj.appModule, "appName", "")
 			if appName:
-				if sharedConfig.isAppExcluded(f"{appName}.exe") or sharedConfig.isAppExcluded(appName):
+				cleanName = appName.lower()
+				if not cleanName.endswith(".exe"):
+					cleanNameWithExe = f"{cleanName}.exe"
+				else:
+					cleanNameWithExe = cleanName
+				if sharedConfig.isAppExcluded(cleanNameWithExe) or sharedConfig.isAppExcluded(cleanName):
 					return True
 	except Exception:
 		pass
@@ -168,8 +184,6 @@ def _buildSupportedSettings():
 	return tuple(settings)
 
 
-# Calls slower than this are written to the NVDA log at debug level so that a
-# report of "speech starts late" can be traced to the step that is responsible.
 _SLOW_CALL_MS = 3.0
 
 
@@ -182,6 +196,29 @@ def _logIfSlow(what, startedAt, detail=""):
 			pass
 
 
+class EventWatcher(threading.Thread):
+	"""Fires the done speaking event if a child synth's own notification doesn't arrive within timeout,
+	so a hung or silent synth can never deadlock the speech queue."""
+
+	def __init__(self, event):
+		super().__init__()
+		self._queue = queue.Queue()
+		self._event = event
+		self.daemon = True
+		self.start()
+
+	def run(self):
+		while True:
+			timeout = self._queue.get()
+			if timeout is None:
+				break
+			if not self._event.wait(timeout):
+				self._event.set()
+
+	def watch(self, timeout):
+		self._queue.put(timeout)
+
+
 class SynthDriver(synthDriverHandler.SynthDriver):
 	name = "autoTTS"
 	description = _("Auto TTS for NVDA")
@@ -189,17 +226,31 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 	supportedSettings = _buildSupportedSettings()
 
 	def __init__(self):
+		self._doneSpeakingFlag = threading.Event()
+		self._doneSpeakingFlag.set()
+		self._doneSpeakingWatcher = EventWatcher(self._doneSpeakingFlag)
 		self._synthCache: Dict[str, Any] = {}
-		# Child synths that have been given speech since the last cancel. Only these
-		# can still be making sound, so cancel() does not have to stop idle ones.
 		self._usedSynths = []
 		self._synth = None
 		self._isSpeaking = False
 		self.speechQueue = queue.Queue()
 		self._markerCounter = itertools.count(1_500_000_000)
 		self._activeMarker = None
+		self._doneSpeakingReceived = False
 		self._activeChunkId = 0
 		self._activeForwardIndices = set()
+		self._everActive = False
+
+		# Route BaseProsodyCommand.defaultValue to active child synth dynamically
+		self._originalDefaultValueForBaseProsodyCommand = BaseProsodyCommand.defaultValue
+		_origDefaultValue = self._originalDefaultValueForBaseProsodyCommand
+
+		def _routedDefaultValue(cmd, _orig=_origDefaultValue):
+			if self._synth is not None and hasattr(self._synth, getattr(cmd, "settingName", "")):
+				return getattr(self._synth, cmd.settingName)
+			return _orig.fget(cmd)
+
+		BaseProsodyCommand.defaultValue = property(_routedDefaultValue)
 
 		# Initialize default language
 		try:
@@ -214,22 +265,45 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 
 		synthDoneSpeaking.register(self._onSynthDoneSpeaking)
 		synthIndexReached.register(self._onSynthIndexReached)
+		activityLog.write("START", f"AutoTTS driver initialized with default voice '{self._voice}'")
 
 	def terminate(self):
-		self.cancel()
-		synthIndexReached.unregister(self._onSynthIndexReached)
-		synthDoneSpeaking.unregister(self._onSynthDoneSpeaking)
+		# Unregister global handlers FIRST
+		try:
+			synthIndexReached.unregister(self._onSynthIndexReached)
+		except Exception:
+			pass
+		try:
+			synthDoneSpeaking.unregister(self._onSynthDoneSpeaking)
+		except Exception:
+			pass
+
+		# Restore original BaseProsodyCommand defaultValue
+		try:
+			BaseProsodyCommand.defaultValue = self._originalDefaultValueForBaseProsodyCommand
+		except Exception:
+			pass
+
+		try:
+			self.cancel()
+			if hasattr(self, "_doneSpeakingWatcher"):
+				self._doneSpeakingWatcher.watch(None)
+		except Exception:
+			pass
 
 		self._synth = None
 		self._isSpeaking = False
 
-		for synth, defaultConf in list(self._synthCache.values()):
-			try:
-				synth.cancel()
-				synth.terminate()
-			except Exception:
-				pass
+		# Only terminate child synths if this instance was actively used
+		if getattr(self, "_everActive", False):
+			for synth, defaultConf in list(self._synthCache.values()):
+				try:
+					synth.cancel()
+					synth.terminate()
+				except Exception:
+					pass
 		self._synthCache.clear()
+		activityLog.write("START", "AutoTTS driver terminated")
 
 	def saveSettings(self):
 		"""Saves AutoTTS settings to NVDA config."""
@@ -248,11 +322,6 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 			normVoice = languageDetection.get_base_language(self._voice)
 			self._voice = normVoice if normVoice in self.availableVoices else next(iter(self.availableVoices), "en")
 
-		# SynthDriver.initSettings delegates to this override whenever an NVDA
-		# config section already exists. The base implementation normally calls
-		# changeVoice, which is also what creates/refreshes NVDA's settings ring.
-		# Without this call globalVars.settingsRing remains None and every
-		# NVDA+Ctrl+arrow settings-ring command fails silently for the user.
 		synthDriverHandler.changeVoice(self, self._voice)
 
 	@classmethod
@@ -283,15 +352,6 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		return any(getattr(s, "id", None) == settingId for s in self.supportedSettings)
 
 	def languageIsSupported(self, lang):
-		"""Auto TTS can route every language tag through a profile or fallback.
-
-		NVDA's base implementation compares language tags only against the voice
-		IDs exposed in ``availableVoices``. Our voice list intentionally contains
-		only configured profiles, so a base profile such as ``en`` would otherwise
-		make inherited tags such as ``en-US`` appear unsupported. Unconfigured
-		tags are still safe: ``_getSynth`` routes them through the configured
-		default synth or the eSpeak fallback.
-		"""
 		return True
 
 	def _getSettingsLanguage(self):
@@ -307,7 +367,6 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		return None
 
 	def _getSettingsSynth(self, settingsLang=None):
-		"""Return the child synth configured for the ring's selected profile."""
 		settingsLang = settingsLang or self._getSettingsLanguage()
 		return self._getSynth(settingsLang) if settingsLang else None
 
@@ -319,27 +378,27 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		settingsLang = self._getSettingsLanguage()
 		if not settingsLang:
 			return
-		langConfig = sharedConfig.languages[settingsLang]
+		langConfig = sharedConfig.languages.get(settingsLang)
+		if not langConfig:
+			return
 		if langConfig.useCustomProsody:
-			# Custom values belong solely to this Auto TTS language profile.
-			# Do not write them into the child synth's NVDA configuration.
 			setattr(langConfig, customAttribute, val)
 			sharedConfig.setLanguageConfig(langConfig)
 			return
 
-		# With custom prosody disabled, this is an ordinary child-synth setting.
 		synth = self._getSettingsSynth(settingsLang)
 		if synth is None or not hasattr(synth, settingId):
 			return
 		try:
-			setattr(synth, settingId, val)
+			if getattr(synth, settingId, None) != val:
+				setattr(synth, settingId, val)
 		except Exception:
 			return
 		self._saveUnderlyingSynthSetting(settingsLang, synth, settingId, val)
 
 	def _get_rate(self):
 		settingsLang = self._getSettingsLanguage()
-		if settingsLang:
+		if settingsLang and settingsLang in sharedConfig.languages:
 			defCfg = sharedConfig.languages[settingsLang]
 			if defCfg.useCustomProsody and defCfg.customRate >= 0:
 				return defCfg.customRate
@@ -351,7 +410,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 
 	def _get_pitch(self):
 		settingsLang = self._getSettingsLanguage()
-		if settingsLang:
+		if settingsLang and settingsLang in sharedConfig.languages:
 			defCfg = sharedConfig.languages[settingsLang]
 			if defCfg.useCustomProsody and defCfg.customPitch >= 0:
 				return defCfg.customPitch
@@ -363,7 +422,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 
 	def _get_volume(self):
 		settingsLang = self._getSettingsLanguage()
-		if settingsLang:
+		if settingsLang and settingsLang in sharedConfig.languages:
 			defCfg = sharedConfig.languages[settingsLang]
 			if defCfg.useCustomProsody and defCfg.customVolume >= 0:
 				return defCfg.customVolume
@@ -374,21 +433,50 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		self._setProsodySetting("volume", "customVolume", val, 100)
 
 	def _onSynthDoneSpeaking(self, synth):
-		"""Handle completion for children which do not use our private end marker.
-
-		Most NVDA synths use an injected IndexCommand to prevent stale completion
-		events from advancing the queue. Google TTS handles its own asynchronous queue
-		and completion correctly, but does not reliably return an injected trailing
-		marker when nested under Auto TTS, so it deliberately uses ``done`` instead.
-		"""
+		"""Handle completion from child synth."""
 		if synth is self or synth is not self._synth or not self._isSpeaking:
 			return
-		if self._activeMarker is not None:
+
+		if getattr(synth, "name", "") == "sapi5":
+			try:
+				if synth.tts.Status.RunningState in (0, 2):
+					return
+				if synth.tts.Status.RunningState != 1:
+					synth.tts.WaitUntilDone(-1)
+			except Exception:
+				pass
+
+		if hasattr(self, "_doneSpeakingFlag") and not self._doneSpeakingFlag.isSet():
+			self._doneSpeakingFlag.set()
+			synthDoneSpeaking.notify(synth=self)
 			return
+
 		chunkId = self._activeChunkId
+		activityLog.write("DONE", f"Synth '{getattr(synth, 'name', '')}' done chunk #{chunkId}")
+
+		# If waiting on a private marker, mark doneSpeaking as received and start safety timeout
+		# so a dropped IndexCommand never causes a speech deadlock!
+		if self._activeMarker is not None:
+			self._doneSpeakingReceived = True
+			self._scheduleMarkerTimeout(synth, chunkId)
+			return
+
 		self._scheduleChunkFinished(synth, chunkId)
 
-	def _usesPrivateEndMarker(self, synth):
+	def _scheduleMarkerTimeout(self, synth, chunkId):
+		def _onTimeout():
+			if getattr(self, "_activeChunkId", None) == chunkId and getattr(self, "_isSpeaking", False):
+				if self._activeMarker is not None:
+					activityLog.write("DEBUG", f"Private marker timed out on chunk #{chunkId}; completing chunk safely")
+					self._activeMarker = None
+					self._doneSpeakingReceived = False
+					self._scheduleChunkFinished(synth, chunkId)
+		try:
+			wx.CallLater(35, _onTimeout)
+		except Exception:
+			pass
+
+	def _usesPrivateEndMarker(self, synth, sequence=None):
 		"""Whether this child can reliably return Auto TTS's trailing marker."""
 		try:
 			if IndexCommand not in getattr(synth, "supportedCommands", set()):
@@ -397,7 +485,19 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				getattr(synth, "name", ""),
 				getattr(type(synth), "__module__", ""),
 			).lower()
-			return "googlettsfornvda" not in identity
+			if "googlettsfornvda" in identity:
+				return False
+			# Never use private end markers for empty or purely punctuation/symbol utterances:
+			# synthesizers produce no phonemes and drop IndexCommand on them.
+			if sequence is not None:
+				has_words = any(
+					any(c.isalnum() for c in item)
+					for item in sequence
+					if isinstance(item, str)
+				)
+				if not has_words:
+					return False
+			return True
 		except Exception:
 			return False
 
@@ -414,36 +514,83 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		if not self._isSpeaking or synth is not self._synth or chunkId != self._activeChunkId:
 			return
 		self._activeMarker = None
+		self._doneSpeakingReceived = False
 		self._activeForwardIndices.clear()
 		self._processNextChunkOrFinish(synth)
 
 	def _processNextChunkOrFinish(self, synth=None):
-		try:
-			lang, speechSequence = self.speechQueue.get_nowait()
-			self._startChunk(lang, speechSequence)
-		except queue.Empty:
-			self._isSpeaking = False
-			self._activeLanguage = self._voice
-			self._activeMarker = None
-			self._activeForwardIndices.clear()
+		while True:
+			try:
+				chunk = self.speechQueue.get_nowait()
+			except queue.Empty:
+				self._isSpeaking = False
+				self._activeLanguage = self._voice
+				self._activeMarker = None
+				self._doneSpeakingReceived = False
+				self._activeForwardIndices.clear()
+				synthDoneSpeaking.notify(synth=self)
+				return
+
+			if len(chunk) == 3:
+				lang, speechSequence, hasText = chunk
+			else:
+				lang, speechSequence = chunk
+				hasText = any(isinstance(item, str) and not item.isspace() for item in speechSequence)
+
+			if hasText:
+				self._startChunk(lang, speechSequence)
+				return
+
+			# Chunk has no speakable text (only IndexCommand or whitespace):
+			# Forward index notifications immediately without sending empty calls to child synths
+			for item in speechSequence:
+				if isinstance(item, IndexCommand) and hasattr(item, "index"):
+					try:
+						synthIndexReached.notify(synth=self, index=item.index)
+					except Exception:
+						pass
 			synthDoneSpeaking.notify(synth=self)
 
 	def _onSynthIndexReached(self, synth, index):
 		if synth is self or synth is not self._synth or not self._isSpeaking:
 			return
 		if index == self._activeMarker:
-			# The private marker proves that this is the active utterance, but an index
-			# can be reported while the final audio is still buffered. Wait for the
-			# child's subsequent done event before starting a different synth, otherwise
-			# the end of an English name can overlap the beginning of an Urdu sentence.
 			self._activeMarker = None
+			if getattr(self, "_doneSpeakingReceived", False):
+				self._doneSpeakingReceived = False
+				chunkId = self._activeChunkId
+				self._scheduleChunkFinished(synth, chunkId)
 		elif index in self._activeForwardIndices:
-			synthIndexReached.notify(synth=self, index=index)
+			try:
+				synthIndexReached.notify(synth=self, index=index)
+			except Exception:
+				pass
 
 	def _markSynthUsed(self, synth):
-		"""Remember that a child synth may be producing audio until the next cancel."""
 		if synth is not None and not any(used is synth for used in self._usedSynths):
 			self._usedSynths.append(synth)
+
+	@staticmethod
+	def _alignLanguageCommands(synth, speechSequence):
+		"""Aligns LangChangeCommand subtag with target voice language to keep voice selection intact."""
+		try:
+			voiceLang = getattr(synth, "language", None)
+		except Exception:
+			return speechSequence
+		if not voiceLang or not isinstance(voiceLang, str):
+			return speechSequence
+		primary = voiceLang.replace("_", "-").split("-")[0].lower()
+		out = []
+		for item in speechSequence:
+			if (
+				isinstance(item, LangChangeCommand)
+				and item.lang
+				and item.lang.replace("_", "-").split("-")[0].lower() == primary
+			):
+				out.append(LangChangeCommand(voiceLang))
+			else:
+				out.append(item)
+		return out
 
 	def _startChunk(self, lang, speechSequence):
 		self._activeLanguage = lang
@@ -452,7 +599,6 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		_logIfSlow("preparing the voice", startedAt, f"(language {lang})")
 		self._markSynthUsed(self._synth)
 		if self._synth is None:
-			# Skip a broken language route instead of leaving the complete queue stuck.
 			self._processNextChunkOrFinish()
 			return
 
@@ -461,10 +607,12 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 			item.index for item in sequence if isinstance(item, IndexCommand) and hasattr(item, "index")
 		}
 		self._activeChunkId += 1
+		chunkId = self._activeChunkId
 		self._activeMarker = None
+		self._doneSpeakingReceived = False
 
 		try:
-			if self._usesPrivateEndMarker(self._synth):
+			if self._usesPrivateEndMarker(self._synth, sequence):
 				marker = next(self._markerCounter)
 				while marker in self._activeForwardIndices:
 					marker = next(self._markerCounter)
@@ -473,20 +621,20 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				while insertAt > 0 and sequence[insertAt - 1].__class__.__name__ == "EndUtteranceCommand":
 					insertAt -= 1
 				sequence.insert(insertAt, IndexCommand(marker))
-			self._synth.speak(sequence)
-			# Creating Chromium/WASM based synths only after the previous language has
-			# finished introduces a multi-second silent gap. The next chunk is already
-			# known, so initialize/apply its voice while the current audio is playing.
+
+			alignedSeq = self._alignLanguageCommands(self._synth, sequence)
+			activityLog.write(
+				"SPEAK",
+				f"lang={lang} -> {getattr(self._synth, 'name', '')} "
+				f"[{activityLog.describeSynth(self._synth)}] seq: {activityLog.describeSequence(alignedSeq)}"
+			)
+			self._synth.speak(alignedSeq)
 			self._prewarmNextQueuedSynth()
 		except Exception as e:
-			try:
-				log.error(f"AutoTTS: Error speaking language chunk '{self._activeLanguage}': {e}")
-			except Exception:
-				pass
+			activityLog.writeException("ERROR", f"Error speaking language chunk '{self._activeLanguage}': {e}")
 			self._processNextChunkOrFinish(self._synth)
 
 	def _prewarmNextQueuedSynth(self):
-		"""Prepare (but never speak) the next queued language synth in advance."""
 		try:
 			with self.speechQueue.mutex:
 				if not self.speechQueue.queue:
@@ -495,23 +643,17 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 			nextConfig = sharedConfig.getLanguageConfig(nextLang)
 			nextSynthName = nextConfig.synth or "espeak"
 			currentSynthName = getattr(self._synth, "name", "")
-			# Changing voice/prosody on the same child while it is still speaking can
-			# affect its active utterance. Same-synth transitions need no construction
-			# warmup anyway, so leave them until the normal chunk boundary.
-			if nextSynthName == currentSynthName:
+			if nextSynthName == currentSynthName or nextSynthName in VIRTUAL_SYNTHS:
 				return
 			self._getSynth(nextLang)
 		except Exception:
-			# Prewarming is only a latency optimization; speech must remain functional
-			# even when an optional child synthesizer cannot initialize early.
 			pass
 
 	def _prewarmConfiguredHighLatencySynths(self):
-		"""Start known asynchronous child runtimes shortly after NVDA startup."""
 		seen = set()
 		for langConfig in sharedConfig.languages.values():
 			synthName = langConfig.synth
-			if not synthName or synthName in seen:
+			if not synthName or synthName in seen or synthName in VIRTUAL_SYNTHS:
 				continue
 			seen.add(synthName)
 			if "googlettsfornvda" not in synthName.lower():
@@ -522,34 +664,39 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				pass
 
 	def pumpSpeech(self):
-		"""Pumps speech from the queue only if not already speaking."""
 		if self._isSpeaking:
 			return
 
-		try:
-			lang, speechSequence = self.speechQueue.get_nowait()
-		except queue.Empty:
-			self._isSpeaking = False
-			self._activeLanguage = self._voice
-			return
+		self._isSpeaking = True
+		self._processNextChunkOrFinish()
 
+	def _rebindSettingsRing(self):
+		"""Keeps the NVDA settings ring bound to AutoTTS when child synths are initialized."""
+		if getattr(self, "_rebinding", False):
+			return
+		self._rebinding = True
 		try:
-			self._isSpeaking = True
-			self._startChunk(lang, speechSequence)
-		except Exception as e:
+			import globalVars
+			ring = getattr(globalVars, "settingsRing", None)
+			getSynth = getattr(synthDriverHandler, "getSynth", None)
+			active = getSynth() if callable(getSynth) else getattr(synthDriverHandler, "synth", None)
+			if ring is not None and active is self:
+				ring.updateSupportedSettings(self)
 			try:
-				log.error(f"AutoTTS: Error during synth speech execution for language '{lang}': {e}")
+				import speechDictHandler
+				speechDictHandler.loadVoiceDict(self)
 			except Exception:
 				pass
-			self._isSpeaking = False
-			synthDoneSpeaking.notify(synth=self)
+		except Exception:
+			pass
+		finally:
+			self._rebinding = False
 
 	def _getSynthByName(self, synthName: str):
 		if not synthName:
 			synthName = "espeak"
-		# Imported profiles may accidentally point back to this routing driver.
-		# Reject that route so normal fallback can run without recursive drivers.
-		if synthName == self.name:
+		# Disallow virtual router synths to avoid recursion
+		if synthName in VIRTUAL_SYNTHS or synthName == self.name:
 			return None
 
 		synth, defaultConf = self._synthCache.get(synthName, (None, {}))
@@ -574,10 +721,10 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		synth.saveSettings = lambda: None
 
 		self._synthCache[synthName] = (synth, defaultConf)
+		self._rebindSettingsRing()
 		return synth
 
 	def _getChildSynthConfig(self, langConfig, synthName, synth):
-		"""Return the NVDA synth config section used by a language profile."""
 		try:
 			profileName = langConfig.profile
 			profile = config.conf._getProfile(profileName)
@@ -599,7 +746,6 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		return None
 
 	def _saveUnderlyingSynthSetting(self, lang, synth, settingId, val):
-		"""Persist a non-custom ring value in the selected child synth config."""
 		synthName = None
 		defaultConf = None
 		for cachedName, (cachedSynth, cachedDefaults) in self._synthCache.items():
@@ -624,18 +770,18 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 	def _getSynth(self, lang: str):
 		langConfig = sharedConfig.getLanguageConfig(lang)
 		synthName = langConfig.synth
-		if not synthName:
+		if not synthName or synthName in VIRTUAL_SYNTHS:
 			defLang = sharedConfig.defaultLang
 			if defLang != lang:
 				defCfg = sharedConfig.getLanguageConfig(defLang)
 				synthName = defCfg.synth
-			if not synthName:
+			if not synthName or synthName in VIRTUAL_SYNTHS:
 				synthName = "espeak"
 
 		synth = self._getSynthByName(synthName)
 		if synth is None:
 			for fallbackName, displayName in synthDriverHandler.getSynthList():
-				if fallbackName in (synthName, self.name, SilenceSynthDriver.name):
+				if fallbackName in (synthName, self.name, SilenceSynthDriver.name) or fallbackName in VIRTUAL_SYNTHS:
 					continue
 				synth = self._getSynthByName(fallbackName)
 				if synth is not None:
@@ -646,33 +792,34 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				return None
 
 		_, defaultConf = self._synthCache.get(synthName, (synth, {}))
-
-		lastLangKey = f"_autoTTS_lastLang_{synthName}"
-		lastAppliedLang = getattr(self, lastLangKey, None)
-		forceApply = (lastAppliedLang != lang)
-		setattr(self, lastLangKey, lang)
-
 		conf = self._getChildSynthConfig(langConfig, synthName, synth)
 
-		# 1. Apply Voice
+		# 1. Apply Voice (with strict dirty-state checking)
 		if synth.isSupported("voice"):
-			if langConfig.voice:
-				targetVoice = langConfig.voice
-			elif conf is not None and "voice" in conf:
-				targetVoice = conf["voice"]
-			else:
-				targetVoice = defaultConf.get("voice")
+			storedVoice = langConfig.voice or (conf["voice"] if (conf is not None and "voice" in conf) else None)
+			nativePreferred = defaultConf.get("voice")
+			targetVoice = voiceMatch.usableVoice(synth, storedVoice, lang, preferred=nativePreferred)
 
 			if targetVoice is not None and targetVoice in getattr(synth, "availableVoices", {}):
-				if forceApply or targetVoice != getattr(synth, "voice", None):
+				if getattr(synth, "voice", None) != targetVoice:
 					try:
 						synth.voice = targetVoice
 					except Exception:
 						pass
 
-		# 2. Apply Prosody (Rate, Pitch, Volume)
+		# 2. Apply Variant (with dirty-state checking)
+		if synth.isSupported("variant"):
+			targetVariant = getattr(langConfig, "variant", None) or defaultConf.get("variant")
+			if targetVariant and targetVariant in getattr(synth, "availableVariants", {}):
+				if getattr(synth, "variant", None) != targetVariant:
+					try:
+						synth.variant = targetVariant
+					except Exception:
+						pass
+
+		# 3. Apply Prosody (Rate, Pitch, Volume) with strict dirty-state checking
 		for setting in getattr(synth, "supportedSettings", []):
-			if setting.id == "voice":
+			if setting.id in ("voice", "variant"):
 				continue
 
 			val = conf[setting.id] if (conf is not None and setting.id in conf) else defaultConf.get(setting.id)
@@ -687,7 +834,9 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 
 			if not getattr(setting, "useConfig", True) or val is None:
 				continue
-			if not forceApply and getattr(synth, setting.id, None) == val:
+			# DIRTY STATE CHECK: Never reassign property if value already matches!
+			# This is the critical fix preventing ETI Eloquence 16kHz audio buffer resets.
+			if getattr(synth, setting.id, None) == val:
 				continue
 			try:
 				setattr(synth, setting.id, val)
@@ -697,6 +846,11 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		return synth
 
 	def speak(self, speechSequence):
+		getSynth = getattr(synthDriverHandler, "getSynth", None)
+		active = getSynth() if callable(getSynth) else getattr(synthDriverHandler, "synth", None)
+		if active is self:
+			self._everActive = True
+
 		startedAt = time.perf_counter()
 		try:
 			self._speak(speechSequence)
@@ -705,8 +859,9 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 
 	def _speak(self, speechSequence):
 		"""
-		Processes incoming speech sequence, checks language lock and application bypass,
-		segments multi-language text, and routes chunks to synthesizers.
+		Processes incoming speech sequence, applies number preprocessing,
+		segments multi-language text, merges consecutive chunks targeting the same synth & voice,
+		and routes speech.
 		"""
 		try:
 			# 1. Check Language Lock
@@ -714,7 +869,6 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				targetLang = sharedConfig.lockedLanguage
 				baseLang = languageDetection.get_base_language(targetLang)
 				langConfig = sharedConfig.getLanguageConfig(targetLang)
-				# Strip any conflicting LangChangeCommands
 				cleanSeq = []
 				for item in speechSequence:
 					if not isinstance(item, LangChangeCommand):
@@ -740,19 +894,32 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				self.pumpSpeech()
 				return
 
-			# 3. Automatic Language Detection & Segmentation
+			# 3. Pre-process numbers & mobile patterns
+			preprocessedSequence = []
+			for item in speechSequence:
+				if isinstance(item, str):
+					text = numberProcessing.reserve_mobile(item, sharedConfig.mobilePattern)
+					text = numberProcessing.rewrite_long_numbers(
+						text,
+						sharedConfig.longNumberMode,
+						sharedConfig.longNumberMinDigits,
+						sharedConfig.croreLakhEnabled
+					)
+					preprocessedSequence.append(text)
+				else:
+					preprocessedSequence.append(item)
+
+			# 4. Automatic Language Detection & Segmentation
 			if sharedConfig.useUnicodeLanguageDetection and sharedConfig.enabled:
 				statisticalLanguages = {}
 				for configuredTag, configuredProfile in sharedConfig.languages.items():
 					if not configuredProfile.enabled:
 						continue
 					base = languageDetection.get_base_language(configuredTag)
-					# Prefer an exact base profile when both a base and regional
-					# variant exist; fastText identifies languages, not dialects.
 					if base not in statisticalLanguages or configuredTag == base:
 						statisticalLanguages[base] = configuredTag
-				speechSequence = list(languageDetection.addDetectedLanguageCommands(
-					speechSequence,
+				preprocessedSequence = list(languageDetection.addDetectedLanguageCommands(
+					preprocessedSequence,
 					defaultLang=self._voice,
 					scriptSettings=sharedConfig.scriptMapping,
 					smartUrduArabic=sharedConfig.smartUrduArabic,
@@ -765,28 +932,53 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 					statisticalLanguages=statisticalLanguages,
 				))
 
+			# 5. Expand mobile numbers and rewrite crore/lakh per-run
+			expandedSequence = []
+			curRunLang = self._voice
+			for item in preprocessedSequence:
+				if isinstance(item, LangChangeCommand):
+					curRunLang = item.lang or self._voice
+					expandedSequence.append(item)
+				elif isinstance(item, str):
+					runText = numberProcessing.expand_reserved_mobile(item, sharedConfig.mobilePattern)
+					if sharedConfig.croreLakhEnabled:
+						base = languageDetection.get_base_language(curRunLang)
+						if base == "en":
+							runText = numberProcessing.rewrite_crore_lakh(runText, True)
+						else:
+							runText = numberProcessing.rewrite_deferred_long_numbers(
+								runText, sharedConfig.longNumberMode, sharedConfig.longNumberMinDigits
+							)
+					expandedSequence.append(runText)
+				else:
+					expandedSequence.append(item)
+
+			# 6. Consecutive Chunk Merging & Route Signatures
 			lang = self._voice
 			langConfig = sharedConfig.getLanguageConfig(lang)
 			newSpeechSequence = []
 			hasText = False
-			# Only these commands represent state which must be restored when a
-			# language boundary genuinely requires another synth/voice invocation.
 			stateCommands = OrderedDict()
 
-			def routeSignature(cfg):
-				synthName = cfg.synth
-				if not synthName:
+			def _resolvedSynthAndVoice(cfg):
+				sName = cfg.synth
+				if not sName or sName in VIRTUAL_SYNTHS:
 					defCfg = sharedConfig.getLanguageConfig(sharedConfig.defaultLang or self._voice)
-					synthName = defCfg.synth or "espeak"
+					sName = defCfg.synth or "espeak"
+				if sName in VIRTUAL_SYNTHS:
+					sName = "espeak"
+				sVoice = cfg.voice or ""
+				return sName.lower(), sVoice.lower()
+
+			def routeSignature(cfg):
+				sName, sVoice = _resolvedSynthAndVoice(cfg)
 				return (
-					synthName,
-					cfg.voice,
-					cfg.sendLang,
-					cfg.profile,
+					sName,
+					sVoice,
 					cfg.useCustomProsody,
-					cfg.customRate,
-					cfg.customPitch,
-					cfg.customVolume,
+					cfg.customRate if cfg.useCustomProsody else -1,
+					cfg.customPitch if cfg.useCustomProsody else -1,
+					cfg.customVolume if cfg.useCustomProsody else -1,
 				)
 
 			def rememberStateCommand(command):
@@ -795,7 +987,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				}:
 					stateCommands[command.__class__] = command
 
-			for item in speechSequence:
+			for item in expandedSequence:
 				if isinstance(item, str):
 					if item.isspace():
 						newSpeechSequence.append(item)
@@ -813,8 +1005,6 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 						normFull, baseLang = languageDetection.normalize_language_code(newLang)
 					else:
 						normFull, baseLang = languageDetection.normalize_language_code(rawLang)
-						# Resolve base detector output to an existing regional profile too,
-						# e.g. ``ur`` -> the user's configured ``ur-pk`` Google voice.
 						newLang = sharedConfig.resolveLanguageCode(normFull)
 
 					if newLang == lang:
@@ -826,13 +1016,19 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 						newLangConfig = sharedConfig.getLanguageConfig(newLang)
 						baseLang = languageDetection.get_base_language(newLang)
 
+					# CONSECUTIVE CHUNK MERGING:
+					# If new language routes to the same underlying synthesizer, voice, and prosody,
+					# merge directly into newSpeechSequence without splitting into separate speak() calls!
 					if routeSignature(newLangConfig) == routeSignature(langConfig):
 						if newLangConfig.sendLang:
 							newSpeechSequence.append(LangChangeCommand(baseLang))
 					elif hasText:
+						activityLog.write(
+							"QUEUE",
+							f"Split chunk: {lang} ({_resolvedSynthAndVoice(langConfig)}) -> "
+							f"{newLang} ({_resolvedSynthAndVoice(newLangConfig)})"
+						)
 						self.speechQueue.put((lang, newSpeechSequence))
-						# Replay only persistent speech state.  Indexes, breaks, beeps and
-						# end-utterance commands must never migrate to another chunk.
 						newSpeechSequence = list(stateCommands.values())
 						hasText = False
 
@@ -847,10 +1043,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				self.speechQueue.put((lang, newSpeechSequence))
 			self.pumpSpeech()
 		except Exception as e:
-			try:
-				log.error(f"AutoTTS: Error in speak pipeline: {e}")
-			except Exception:
-				pass
+			activityLog.writeException("ERROR", f"Error in speak pipeline: {e}")
 
 	def pause(self, switch):
 		if self._synth is not None:
@@ -860,7 +1053,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				pass
 
 	def cancel(self):
-		"""Instantly and synchronously cancels all active speech across all cached synths."""
+		"""Instantly and synchronously cancels speech across active child synths."""
 		try:
 			while True:
 				self.speechQueue.get_nowait()
@@ -871,10 +1064,9 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		self._activeLanguage = self._voice
 		self._activeChunkId += 1
 		self._activeMarker = None
+		self._doneSpeakingReceived = False
 		self._activeForwardIndices.clear()
 
-		# Stopping an audio device costs time on every key press, so only the child
-		# synths which were actually given speech since the last cancel are stopped.
 		startedAt = time.perf_counter()
 		used = self._usedSynths
 		self._usedSynths = []
@@ -887,15 +1079,18 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 			except Exception:
 				pass
 
-		self._synth = None
+		if self._synth is not None:
+			if hasattr(self, "_doneSpeakingFlag"):
+				self._doneSpeakingFlag.clear()
+			self._synth = None
+			if hasattr(self, "_doneSpeakingWatcher"):
+				self._doneSpeakingWatcher.watch(0.025)
+
 		_logIfSlow("cancel", startedAt, f"({len(used)} synths)")
 
 	def _getAvailableVoices(self):
 		"""Return only Auto TTS profiles as languages in NVDA's settings ring."""
 		profileLangs = sorted(sharedConfig.languages.keys())
-		# NVDA requires the current synth voice to exist in availableVoices even
-		# before any profile is configured. This single fallback also keeps the
-		# eSpeak route available; it disappears once the first profile exists.
 		if not profileLangs:
 			profileLangs = [getattr(self, "_voice", None) or sharedConfig.defaultLang or "en"]
 		voices = OrderedDict()
@@ -908,14 +1103,12 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		return voices
 
 	def _get_availableVoices(self):
-		# Profiles can be added, renamed or removed while the synth is active.
 		return self._getAvailableVoices()
 
 	def _get_voice(self):
 		return self._voice
 
 	def _get_language(self):
-		"""Always return a valid language, including the zero-profile fallback."""
 		voiceInfo = self.availableVoices.get(self._voice)
 		if voiceInfo is not None and getattr(voiceInfo, "language", None):
 			return voiceInfo.language

@@ -6,6 +6,7 @@ try:
 	import gui
 	from gui.settingsDialogs import NVDASettingsDialog
 	import globalPluginHandler
+	import globalVars
 	from scriptHandler import script
 	import ui
 	import addonHandler
@@ -17,6 +18,9 @@ except ImportError:
 		class GlobalPlugin:
 			def __init__(self): pass
 			def terminate(self): pass
+	class globalVars:
+		class appArgs:
+			secure = False
 	def script(*args, **kwargs):
 		def decorator(func): return func
 		return decorator
@@ -27,6 +31,7 @@ except ImportError:
 
 from .settingsPanel import AutoTTSSettingsPanel, _getLangName
 from synthDrivers.autoTTS.configManager import sharedConfig
+from synthDrivers.autoTTS import activityLog
 
 
 class LanguageLockDialog(wx.SingleChoiceDialog):
@@ -64,12 +69,33 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def __init__(self):
 		super().__init__()
+		self.menuItem = None
+
 		# Register Settings Panel Category in NVDA Settings Dialog (NVDA+Ctrl+G)
 		try:
 			if AutoTTSSettingsPanel not in NVDASettingsDialog.categoryClasses:
 				NVDASettingsDialog.categoryClasses.append(AutoTTSSettingsPanel)
 		except Exception:
 			pass
+
+		# Register in Preferences Menu
+		if not getattr(globalVars.appArgs, "secure", False):
+			try:
+				preferencesMenu = getattr(gui.mainFrame.sysTrayIcon, "preferencesMenu", None)
+				if preferencesMenu:
+					self.menuItem = preferencesMenu.Append(
+						wx.ID_ANY,
+						_("Auto &TTS Settings..."),
+						_("Configure Auto TTS automatic language detection, profiles, and synthesizers."),
+					)
+					gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, self._onMenuSettings, self.menuItem)
+			except Exception:
+				pass
+			try:
+				import speech.extensions
+				speech.extensions.pre_speech.register(self._onPreSpeech)
+			except Exception:
+				pass
 
 		# First run onboarding prompt
 		if getattr(sharedConfig, "firstRun", False):
@@ -89,13 +115,40 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			pass
 
 	def terminate(self):
-		"""Cleans up settings category when add-on is unloaded or reloaded."""
+		"""Cleans up settings category and menu item when add-on is unloaded or reloaded."""
 		try:
 			if AutoTTSSettingsPanel in NVDASettingsDialog.categoryClasses:
 				NVDASettingsDialog.categoryClasses.remove(AutoTTSSettingsPanel)
 		except Exception:
 			pass
+		try:
+			if self.menuItem:
+				preferencesMenu = getattr(gui.mainFrame.sysTrayIcon, "preferencesMenu", None)
+				if preferencesMenu:
+					preferencesMenu.Remove(self.menuItem)
+		except Exception:
+			pass
+		try:
+			import speech.extensions
+			speech.extensions.pre_speech.unregister(self._onPreSpeech)
+		except Exception:
+			pass
 		super().terminate()
+
+	def _onMenuSettings(self, event):
+		wx.CallAfter(self._openSettings)
+
+	def _onPreSpeech(self, speechSequence=None, **kwargs):
+		try:
+			synth = synthDriverHandler.getSynth()
+			name = synth.name if synth else None
+			settings = activityLog.describeSynth(synth) if synth else ""
+			activityLog.write(
+				"NVDA",
+				f"active synth={name} [{settings}] speech: {activityLog.describeSequence(speechSequence or [])}"
+			)
+		except Exception:
+			pass
 
 	def _prewarmActiveAutoTTS(self):
 		try:

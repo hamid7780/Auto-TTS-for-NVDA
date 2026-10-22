@@ -24,6 +24,11 @@ except ImportError:
 			def __init__(self, *args, **kwargs): pass
 			def addItem(self, item): return item
 			def addLabeledControl(self, label, cls, **kwargs): return cls()
+	class wx:
+		class SpinCtrl:
+			def __init__(self, *args, **kwargs): pass
+			def GetValue(self): return 5
+			def SetValue(self, val): pass
 	class speech:
 		@staticmethod
 		def speak(seq): pass
@@ -58,6 +63,7 @@ from synthDrivers.autoTTS.languageDetection import (
 	normalize_language_code,
 	get_base_language,
 )
+from synthDrivers.autoTTS import voiceMatch, voiceLabels, activityLog
 
 
 def _getSynthInstance(name: str):
@@ -206,6 +212,25 @@ TAG_MODES: List[Tuple[str, str]] = [
 	("preferTags", _("Trust document language tags when they are present")),
 ]
 
+MOBILE_PATTERNS: List[Tuple[str, str]] = [
+	("none", _("None")),
+	("spaces", _("Spaced digits (e.g. 0 3 0 0)")),
+	("grouped", _("Grouped digits (e.g. 0300 1234567)")),
+	("words", _("Spoken words")),
+]
+
+LARGE_NUMBER_SYSTEMS: List[Tuple[str, str]] = [
+	("western", _("Default / Western system (Million, Billion)")),
+	("indian", _("Indian numbering system (Lakh, Crore)")),
+]
+
+LONG_NUMBER_MODES: List[Tuple[str, str]] = [
+	("digits", _("Individual digits")),
+	("grouped", _("Grouped in clusters of 3 digits")),
+	("crore_lakh", _("Indian numbering (Crore & Lakh)")),
+	("natural", _("Standard natural numbers")),
+]
+
 
 def _safeInt(val: Any, default: int = 50) -> int:
 	try:
@@ -217,15 +242,15 @@ def _safeInt(val: Any, default: int = 50) -> int:
 
 
 def _getInstalledSynths() -> List[Tuple[str, str]]:
-	"""Returns list of (synthId, displayName) for all installed synths."""
+	"""Returns list of (synthId, displayName) for all installed synths, excluding virtual synths."""
 	synths = [("", _("[Use NVDA Default Synthesizer]"))]
 	try:
 		for id, name in synthDriverHandler.getSynthList():
-			if id not in ("autoTTS", "silence"):
+			if id not in ("autoTTS", "silence") and id.lower() not in voiceMatch.VIRTUAL_SYNTHS:
 				synths.append((id, name))
 	except Exception:
 		synths.append(("espeak", "eSpeak NG"))
-	return synths
+	return sorted(synths, key=lambda s: voiceMatch.synthSortKey(s[0], s[1]))
 
 
 def _getLangName(code: str) -> str:
@@ -250,66 +275,48 @@ def _getAvailableProfiles() -> List[Tuple[str, str]]:
 	return profiles
 
 
-def _getPreviewSynth(synthId: str):
-	"""Gets an already-cached synth instance for preview."""
-	activeSynth = getattr(synthDriverHandler, "synth", None)
-
+def _getSynthInstanceForEnum(synthId: str):
+	"""Returns a synth instance to read availableVoices / availableVariants / settings,
+	reusing live instances when possible, safely creating one without breaking process-wide engines."""
 	if not synthId:
-		if activeSynth and getattr(activeSynth, "name", "") == "autoTTS":
-			defLang = sharedConfig.defaultLang
-			defCfg = sharedConfig.getLanguageConfig(defLang)
-			if defCfg.synth and hasattr(activeSynth, "_synthCache") and defCfg.synth in activeSynth._synthCache:
-				return activeSynth._synthCache[defCfg.synth][0]
-			if hasattr(activeSynth, "_synthCache") and "espeak" in activeSynth._synthCache:
-				return activeSynth._synthCache["espeak"][0]
-		elif activeSynth and getattr(activeSynth, "name", "") not in ("autoTTS", "silence"):
+		synthId = "espeak"
+	activeSynth = getattr(synthDriverHandler, "synth", None)
+	if activeSynth is not None:
+		if getattr(activeSynth, "name", "") == synthId:
 			return activeSynth
+		if getattr(activeSynth, "name", "") == "autoTTS":
+			if hasattr(activeSynth, "_synthCache") and synthId in activeSynth._synthCache:
+				return activeSynth._synthCache[synthId][0]
+			if hasattr(activeSynth, "_getSynthByName"):
+				inst = activeSynth._getSynthByName(synthId)
+				if inst is not None:
+					return inst
 
-	if activeSynth and getattr(activeSynth, "name", "") == "autoTTS":
-		if hasattr(activeSynth, "_synthCache") and synthId in activeSynth._synthCache:
-			return activeSynth._synthCache[synthId][0]
+	if not hasattr(_getSynthInstanceForEnum, "_cache"):
+		_getSynthInstanceForEnum._cache = {}
+	if synthId in _getSynthInstanceForEnum._cache:
+		return _getSynthInstanceForEnum._cache[synthId]
 
-	if activeSynth and getattr(activeSynth, "name", "").lower() == (synthId or "").lower():
-		return activeSynth
+	inst = None
+	try:
+		inst = synthDriverHandler.getSynthInstance(synthId)
+	except Exception:
+		try:
+			inst = _getSynthInstance(synthId)
+		except Exception:
+			inst = None
 
-	if not hasattr(_getPreviewSynth, "_fallbackCache"):
-		_getPreviewSynth._fallbackCache = {}
-	if synthId in _getPreviewSynth._fallbackCache:
-		return _getPreviewSynth._fallbackCache[synthId]
+	if inst is not None:
+		_getSynthInstanceForEnum._cache[synthId] = inst
+	return inst
 
-	return None
+
+def _getPreviewSynth(synthId: str):
+	return _getSynthInstanceForEnum(synthId)
 
 
 def _ensurePreviewSynth(synthId: str):
-	"""Gets or creates a synth instance when user explicitly requests speech."""
-	synth = _getPreviewSynth(synthId)
-	if synth is not None:
-		return synth
-
-	activeSynth = getattr(synthDriverHandler, "synth", None)
-
-	if not synthId:
-		if activeSynth and getattr(activeSynth, "name", "") == "autoTTS":
-			if hasattr(activeSynth, "_getSynth"):
-				return activeSynth._getSynth(sharedConfig.defaultLang)
-		elif activeSynth and getattr(activeSynth, "name", "") not in ("autoTTS", "silence"):
-			return activeSynth
-		synthId = "espeak"
-
-	if activeSynth and getattr(activeSynth, "name", "") == "autoTTS":
-		if hasattr(activeSynth, "_getSynthByName"):
-			return activeSynth._getSynthByName(synthId)
-
-	try:
-		if not hasattr(_getPreviewSynth, "_fallbackCache"):
-			_getPreviewSynth._fallbackCache = {}
-		if synthId not in _getPreviewSynth._fallbackCache:
-			s = _getSynthInstance(synthId)
-			_getPreviewSynth._fallbackCache[synthId] = s
-		return _getPreviewSynth._fallbackCache.get(synthId)
-	except Exception as e:
-		log.error(f"AutoTTS: Error ensuring preview synth for '{synthId}': {e}")
-		return None
+	return _getSynthInstanceForEnum(synthId)
 
 
 def _saveSynthState(synthId: str) -> Dict[str, Any]:
@@ -347,14 +354,14 @@ def _restoreSynthState(synthId: str, state: Dict[str, Any]):
 
 
 def _getVoicesForSynth(synthId: str, voiceListCache: Dict) -> List[Tuple[str, str]]:
-	"""Gets available voices for a synth using already-cached instances."""
+	"""Gets available voices for a synth using already-cached or freshly resolved instances."""
 	cacheKey = synthId or "__default__"
 	if cacheKey in voiceListCache:
 		return voiceListCache[cacheKey]
 
 	voices = []
 	try:
-		cachedSynth = _getPreviewSynth(synthId)
+		cachedSynth = _getSynthInstanceForEnum(synthId)
 		if cachedSynth and hasattr(cachedSynth, "availableVoices") and cachedSynth.availableVoices:
 			for vId, vInfo in cachedSynth.availableVoices.items():
 				vName = getattr(vInfo, "displayName", None) or getattr(vInfo, "name", None) or str(vId)
@@ -362,10 +369,10 @@ def _getVoicesForSynth(synthId: str, voiceListCache: Dict) -> List[Tuple[str, st
 	except Exception as e:
 		log.error(f"AutoTTS: Error retrieving voices for '{synthId}': {e}")
 
-	if not voices:
-		voices = [("", _("Default Voice"))]
-	voiceListCache[cacheKey] = voices
-	return voices
+	if voices:
+		voiceListCache[cacheKey] = voices
+		return voices
+	return [("", _("Default Voice"))]
 
 
 def _getSynthCurrentSettings(synthId: str) -> Dict[str, Any]:
@@ -520,6 +527,7 @@ class ProfileEditorDialog(wx.Dialog):
 		self.result: Optional[LanguageVoiceConfig] = None
 
 		self._originalSynthStates: Dict[str, Dict[str, Any]] = {}
+		self._targetVoiceId: Optional[str] = langConfig.voice if (isEdit and langConfig) else None
 		self._previewTimer = None
 
 		try:
@@ -647,6 +655,8 @@ class ProfileEditorDialog(wx.Dialog):
 		else:
 			self.langChoice.SetValue(normFull)
 
+		self._targetVoiceId = cfg.voice
+
 		synthIdx = 0
 		for i, (sId, sName) in enumerate(self._availableSynths):
 			if sId.lower() == (cfg.synth or "").lower():
@@ -654,7 +664,7 @@ class ProfileEditorDialog(wx.Dialog):
 				break
 		self.synthChoice.SetSelection(synthIdx)
 
-		self._loadVoicesForSelectedSynth()
+		self._loadVoicesForSelectedSynth(selectVoiceId=cfg.voice)
 
 		if cfg.voice:
 			for i, (vId, vName) in enumerate(self.currentVoices):
@@ -716,79 +726,66 @@ class ProfileEditorDialog(wx.Dialog):
 		self.pitchSlider.Enable(enabled)
 		self.volumeSlider.Enable(enabled)
 
-	def _loadVoicesForSelectedSynth(self):
+	def _loadVoicesForSelectedSynth(self, selectVoiceId=None):
 		synthId = self._getSelectedSynthId()
 		langCode = self._getSelectedLangCode()
-		baseLang = get_base_language(langCode)
-		langName = _getLangName(langCode).lower()
+		targetVoice = selectVoiceId if selectVoiceId is not None else getattr(self, "_targetVoiceId", None)
 
 		if synthId and synthId not in self._originalSynthStates:
 			self._originalSynthStates[synthId] = _saveSynthState(synthId)
 
+		synth = _getSynthInstanceForEnum(synthId)
 		try:
 			allVoices = _getVoicesForSynth(synthId, self._voiceListCache)
 		except Exception:
 			allVoices = [("", _("Default Voice"))]
 
-		if langCode and len(allVoices) > 1:
-			langLower = langCode.lower()
-			baseLower = baseLang.lower()
-			filtered = []
-			for vId, vName in allVoices:
-				if not vId:
-					continue
-				vIdLower = str(vId).lower()
-				vNameLower = str(vName).lower()
+		matching = []
+		if synth and langCode:
+			try:
+				matching = voiceMatch.voicesForLanguage(synth, langCode)
+			except Exception:
+				matching = []
 
-				isMatch = (
-					vIdLower == langLower
-					or vIdLower == baseLower
-					or vIdLower.startswith(f"{langLower}_") or vIdLower.startswith(f"{langLower}-")
-					or vIdLower.startswith(f"{baseLower}_") or vIdLower.startswith(f"{baseLower}-")
-					or f"({langLower})" in vNameLower or f"[{langLower}]" in vNameLower
-					or f"({baseLower})" in vNameLower or f"[{baseLower}]" in vNameLower
-					or f"_{langLower}" in vIdLower or f"-{langLower}" in vIdLower
-					or f"_{baseLower}" in vIdLower or f"-{baseLower}" in vIdLower
-					or langName in vNameLower
-				)
-				if isMatch:
-					filtered.append((vId, vName))
-
-			if filtered:
-				self.currentVoices = [("", _("Default Voice"))] + filtered
-			else:
-				self.currentVoices = allVoices
+		rawVoices = [v for v in allVoices if v[0]]
+		if matching and len(matching) < len(rawVoices):
+			displayVoices = [("", _("Default Voice"))]
+			for vId, vInfo in matching:
+				vName = getattr(vInfo, "displayName", None) or getattr(vInfo, "name", None) or str(vId)
+				displayVoices.append((vId, vName))
+			self.currentVoices = displayVoices
 		else:
-			self.currentVoices = allVoices
+			self.currentVoices = [("", _("Default Voice"))] + rawVoices
+
+		# Smart voice matching:
+		chosenVoice = None
+		nativePreferred = _getSynthDefaultVoice(synthId)
+		if synth and langCode:
+			try:
+				chosenVoice = voiceMatch.usableVoice(synth, targetVoice, langCode, preferred=nativePreferred)
+			except Exception:
+				chosenVoice = None
+
+		if not chosenVoice:
+			chosenVoice = targetVoice or nativePreferred
+
+		# Ensure chosenVoice is present in currentVoices if available on synth
+		if chosenVoice and not any(str(v[0]).lower() == str(chosenVoice).lower() for v in self.currentVoices):
+			for vId, vName in rawVoices:
+				if str(vId).lower() == str(chosenVoice).lower():
+					self.currentVoices.append((vId, vName))
+					break
 
 		self.voiceChoice.Clear()
 		for vId, vName in self.currentVoices:
 			self.voiceChoice.Append(vName)
 
-		defaultVoice = _getSynthDefaultVoice(synthId)
-		vIdx = -1
-		if defaultVoice:
+		vIdx = 0
+		if chosenVoice:
 			for i, (vId, vName) in enumerate(self.currentVoices):
-				if str(vId).lower() == str(defaultVoice).lower():
+				if str(vId).lower() == str(chosenVoice).lower():
 					vIdx = i
 					break
-
-		if vIdx == -1 and langCode:
-			langCodeLower = langCode.lower()
-			baseLower = baseLang.lower()
-			for i, (vId, vName) in enumerate(self.currentVoices):
-				vIdLower = str(vId).lower()
-				vNameLower = str(vName).lower()
-				if (f"{langCodeLower}_" in vIdLower or f"{langCodeLower}-" in vIdLower
-					or f"{baseLower}_" in vIdLower or f"{baseLower}-" in vIdLower
-					or f"({langCodeLower})" in vNameLower or f"[{langCodeLower}]" in vNameLower
-					or langCodeLower in vIdLower or baseLower in vIdLower
-					or langName in vNameLower):
-					vIdx = i
-					break
-
-		if vIdx == -1:
-			vIdx = 0
 
 		if self.voiceChoice.GetCount() > 0:
 			self.voiceChoice.SetSelection(vIdx)
@@ -822,9 +819,19 @@ class ProfileEditorDialog(wx.Dialog):
 				pass
 
 	def _onSynthChanged(self, event):
-		self._loadVoicesForSelectedSynth()
+		synthId = self._getSelectedSynthId()
+		synth = _getSynthInstanceForEnum(synthId)
+		avail = getattr(synth, "availableVoices", {}) if synth else {}
+		target = getattr(self, "_targetVoiceId", None)
+		if target and target not in avail:
+			target = None
+			self._targetVoiceId = None
+		self._loadVoicesForSelectedSynth(selectVoiceId=target)
 
 	def _onVoiceChanged(self, event):
+		voiceIdx = self.voiceChoice.GetSelection()
+		if 0 <= voiceIdx < len(self.currentVoices):
+			self._targetVoiceId = self.currentVoices[voiceIdx][0]
 		self._applyVoiceToPreviewSynth()
 
 	def _onLangChanged(self, event):
@@ -1056,6 +1063,42 @@ class AutoTTSSettingsPanel(SettingsPanel):
 			numIdx = next((i for i, (c, modeDesc) in enumerate(NUMBER_MODES) if c == sharedConfig.numberMode), 0)
 			self.numberModeChoice.SetSelection(numIdx)
 
+			# Mobile Phone Number Pattern
+			mobileLabels = [m[1] for m in MOBILE_PATTERNS]
+			self.mobilePatternChoice = sHelper.addLabeledControl(
+				_("&Mobile phone number pattern:"),
+				wx.Choice,
+				choices=mobileLabels
+			)
+			mobIdx = next((i for i, (c, _) in enumerate(MOBILE_PATTERNS) if c == sharedConfig.mobilePattern), 0)
+			self.mobilePatternChoice.SetSelection(mobIdx)
+
+			# Large Numbers Numbering System (combines Indian Lakh/Crore vs Western Million/Billion)
+			largeNumLabels = [m[1] for m in LARGE_NUMBER_SYSTEMS]
+			self.largeNumberSystemChoice = sHelper.addLabeledControl(
+				_("&Large numbers format:"),
+				wx.Choice,
+				choices=largeNumLabels,
+			)
+			largeNumIdx = 1 if getattr(sharedConfig, "croreLakhEnabled", True) else 0
+			self.largeNumberSystemChoice.SetSelection(largeNumIdx)
+
+			# Activity Logging & Diagnostics
+			self.loggingCheck = sHelper.addItem(
+				wx.CheckBox(self, label=_("Enable diagnostic activity &logging (Auto TTS log.txt)"))
+			)
+			self.loggingCheck.SetValue(bool(getattr(sharedConfig, "loggingEnabled", True)))
+
+			self.logIncludeTextCheck = sHelper.addItem(
+				wx.CheckBox(self, label=_("Include spoken &text in log (Privacy warning: spoken text is written to disk)"))
+			)
+			self.logIncludeTextCheck.SetValue(bool(getattr(sharedConfig, "logIncludeText", False)))
+
+			self.openLogFolderBtn = sHelper.addItem(
+				wx.Button(self, label=_("&Open Log Folder..."))
+			)
+			self.openLogFolderBtn.Bind(wx.EVT_BUTTON, self.onOpenLogFolder)
+
 			# App Exclusions Button
 			self.appExclusionsBtn = sHelper.addItem(
 				wx.Button(self, label=_("&Excluded Applications (Auto-Bypass)..."))
@@ -1198,6 +1241,13 @@ class AutoTTSSettingsPanel(SettingsPanel):
 
 					granIdx = next((i for i, (c, mDesc) in enumerate(GRANULARITY_MODES) if c == sharedConfig.granularityMode), 0)
 					self.granularityChoice.SetSelection(granIdx)
+
+					mobIdx = next((i for i, (c, _) in enumerate(MOBILE_PATTERNS) if c == sharedConfig.mobilePattern), 0)
+					self.mobilePatternChoice.SetSelection(mobIdx)
+
+					self.largeNumberSystemChoice.SetSelection(1 if getattr(sharedConfig, "croreLakhEnabled", True) else 0)
+					self.loggingCheck.SetValue(bool(getattr(sharedConfig, "loggingEnabled", True)))
+					self.logIncludeTextCheck.SetValue(bool(getattr(sharedConfig, "logIncludeText", False)))
 
 					wx.MessageBox(
 						_("Auto TTS settings and profiles imported successfully."),
@@ -1443,6 +1493,15 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				sharedConfig.lockedLanguage = None
 				sharedConfig.save(allowEmptyProfiles=True)
 
+				sharedConfig.mobilePattern = "none"
+				sharedConfig.longNumberMode = "digits"
+				sharedConfig.longNumberMinDigits = 5
+				sharedConfig.croreLakhEnabled = False
+				sharedConfig.loggingEnabled = True
+				sharedConfig.logIncludeText = False
+				activityLog.setEnabled(True)
+				activityLog.setIncludeText(False)
+
 				self._voiceListCache.clear()
 
 				# Reload UI
@@ -1454,6 +1513,10 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				self._refreshMathLanguageChoices()
 				self.tagModeChoice.SetSelection(0)
 				self.numberModeChoice.SetSelection(0)
+				self.mobilePatternChoice.SetSelection(0)
+				self.largeNumberSystemChoice.SetSelection(1 if getattr(sharedConfig, "croreLakhEnabled", True) else 0)
+				self.loggingCheck.SetValue(True)
+				self.logIncludeTextCheck.SetValue(False)
 				self.granularityChoice.SetSelection(0)
 				self._refreshProfileList()
 				self._syncActiveSynth()
@@ -1469,11 +1532,22 @@ class AutoTTSSettingsPanel(SettingsPanel):
 			except Exception:
 				pass
 
+	def onOpenLogFolder(self, event):
+		try:
+			activityLog.openFolder()
+		except Exception as e:
+			try:
+				log.exception(f"AutoTTS: Error opening log folder: {e}")
+			except Exception:
+				pass
+
 	def _syncActiveSynth(self):
 		try:
 			getSynth = getattr(synthDriverHandler, "getSynth", None)
 			activeSynth = getSynth() if callable(getSynth) else getattr(synthDriverHandler, "synth", None)
 			if activeSynth and getattr(activeSynth, "name", "") == "autoTTS":
+				if hasattr(activeSynth, "loadSettings"):
+					activeSynth.loadSettings()
 				targetLang = sharedConfig.defaultLang
 				if targetLang not in sharedConfig.languages and sharedConfig.languages:
 					targetLang = next(iter(sharedConfig.languages))
@@ -1503,6 +1577,19 @@ class AutoTTSSettingsPanel(SettingsPanel):
 			numIdx = self.numberModeChoice.GetSelection()
 			if 0 <= numIdx < len(NUMBER_MODES):
 				sharedConfig.numberMode = NUMBER_MODES[numIdx][0]
+
+			mobIdx = self.mobilePatternChoice.GetSelection()
+			if 0 <= mobIdx < len(MOBILE_PATTERNS):
+				sharedConfig.mobilePattern = MOBILE_PATTERNS[mobIdx][0]
+
+			largeNumIdx = self.largeNumberSystemChoice.GetSelection()
+			if 0 <= largeNumIdx < len(LARGE_NUMBER_SYSTEMS):
+				sharedConfig.croreLakhEnabled = (LARGE_NUMBER_SYSTEMS[largeNumIdx][0] == "indian")
+				sharedConfig.longNumberMode = "none" if (LARGE_NUMBER_SYSTEMS[largeNumIdx][0] == "western") else "group_5"
+			sharedConfig.loggingEnabled = bool(self.loggingCheck.GetValue())
+			sharedConfig.logIncludeText = bool(self.logIncludeTextCheck.GetValue())
+			activityLog.setEnabled(sharedConfig.loggingEnabled)
+			activityLog.setIncludeText(sharedConfig.logIncludeText)
 
 			granIdx = self.granularityChoice.GetSelection()
 			if 0 <= granIdx < len(GRANULARITY_MODES):

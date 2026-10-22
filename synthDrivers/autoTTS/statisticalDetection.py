@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import threading
+import functools
 from collections import OrderedDict
 from typing import Dict, Optional, Tuple
 
@@ -17,7 +18,6 @@ except ImportError:
 		@staticmethod
 		def warning(message): pass
 
-
 _ADDON_DIR = os.path.dirname(__file__)
 _RUNTIME_DIR = os.path.join(_ADDON_DIR, "fasttext_runtime")
 _MODEL_PATH = os.path.join(_ADDON_DIR, "models", "lid.176.ftz")
@@ -25,13 +25,9 @@ _LABEL_PREFIX = "__label__"
 _model = None
 _loadAttempted = False
 _loadLock = threading.Lock()
-_cache = OrderedDict()
-_CACHE_LIMIT = 512
+_CACHE_LIMIT = 2048
 
-# These are intentionally broad script families, not a claim that every
-# language is written exclusively in the listed script.  They only decide
-# whether statistical detection is useful for a piece of already segmented
-# text.  The model still makes the actual language decision.
+# Script family hints to constrain candidate languages (Script-Gated Whitelist)
 LANGUAGE_SCRIPT_HINTS = {
 	"Arabic": {
 		"ar", "azb", "bal", "ckb", "dv", "fa", "glk", "ks", "ku", "lrc",
@@ -61,10 +57,11 @@ LANGUAGE_SCRIPT_HINTS = {
 	},
 	"Tamil": {"ta"},
 	"Telugu": {"te"},
+	"Kannada": {"kn"},
+	"Malayalam": {"ml"},
+	"Gujarati": {"gu"},
 }
 
-# A bare "/" only starts a protected path when it is not inside a word, so
-# ordinary text such as "and/or" or "km/h" is still language-detected.
 _PROTECTED_RE = re.compile(
 	r"(?:https?://|www\.|\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b|"
 	r"(?:[A-Za-z]:\\|(?<!\w)/)[^\s]+|\b\w+\.(?:com|org|net|exe|dll|py|js|json|html)\b)",
@@ -94,15 +91,18 @@ def _load_model():
 			return _model
 		_loadAttempted = True
 		try:
-			if _RUNTIME_DIR not in sys.path:
+			if os.path.isdir(_RUNTIME_DIR) and _RUNTIME_DIR not in sys.path:
 				sys.path.insert(0, _RUNTIME_DIR)
-			import fasttext
-			_model = fasttext.load_model(_MODEL_PATH)
-			log.debug("AutoTTS: bundled fastText language model loaded")
+			if os.path.isfile(_MODEL_PATH):
+				import fasttext
+				_model = fasttext.load_model(_MODEL_PATH)
+				log.debug("AutoTTS: bundled fastText language model loaded successfully")
+			else:
+				log.warning("AutoTTS: fastText model file missing; using pure-Python heuristics")
 		except Exception as error:
-			# Detection is an enhancement.  A missing/incompatible binary must never
-			# stop speech; Unicode and document-tag detection remain available.
-			log.warning(f"AutoTTS: fastText unavailable; using Unicode detection: {error}")
+			# Pure-Python fallback ensures no crashes occur if fasttext native library fails to load
+			log.warning(f"AutoTTS: fastText unavailable; fallback to pure-Python heuristics: {error}")
+			_model = None
 	return _model
 
 
@@ -112,11 +112,46 @@ def _prepare_text(text: str) -> Optional[Tuple[str, int]]:
 		return None
 	words = _WORD_RE.findall(cleaned)
 	letterCount = sum(len(word) for word in words)
-	# One-word language guesses are the main cause of voice thrashing.  Clear
-	# cross-script single words are already handled without this model.
+	# Single characters or very short 1-word text (under 6 chars) should never be processed
+	# by statistical ML to avoid voice thrashing during letter typing or spelling.
 	if len(words) < 2 or letterCount < 6:
 		return None
 	return cleaned, len(words)
+
+
+@functools.lru_cache(maxsize=2048)
+def _predict_cached(
+	cleaned: str,
+	allowed_items: Tuple[Tuple[str, str], ...],
+	wordCount: int,
+	minimumConfidence: float,
+	minimumMargin: float,
+) -> Optional[str]:
+	model = _load_model()
+	if model is None:
+		return None
+
+	allowedLanguages = dict(allowed_items)
+	try:
+		labels, probabilities = model.predict(cleaned, k=2)
+		if labels and probabilities:
+			language = str(labels[0])
+			if language.startswith(_LABEL_PREFIX):
+				language = language[len(_LABEL_PREFIX):]
+			language = language.lower()
+			confidence = float(probabilities[0])
+			second = float(probabilities[1]) if len(probabilities) > 1 else 0.0
+
+			required = max(minimumConfidence, 0.78 if wordCount == 2 else minimumConfidence)
+			if (
+				language in allowedLanguages
+				and confidence >= required
+				and (confidence - second) >= minimumMargin
+			):
+				return allowedLanguages[language]
+	except Exception as error:
+		log.debug(f"AutoTTS: fastText prediction failed: {error}")
+	return None
 
 
 def detect_language(
@@ -126,48 +161,16 @@ def detect_language(
 	minimumMargin: float = 0.12,
 ) -> Optional[str]:
 	"""
-	Return a configured profile tag, or None when the guess is unsafe.
-
-	Only the model's overall top result is accepted.  We never select a weak
-	lower-ranked prediction merely because it happens to have a profile.
+	Return a configured profile tag, or None when statistical guess is unsafe or unavailable.
+	Thread-safe with LRU caching up to 2048 items.
 	"""
 	prepared = _prepare_text(text)
 	if not prepared or not allowedLanguages:
 		return None
 	cleaned, wordCount = prepared
-	cacheKey = (cleaned, tuple(sorted(allowedLanguages.items())), minimumConfidence, minimumMargin)
-	if cacheKey in _cache:
-		_cache.move_to_end(cacheKey)
-		return _cache[cacheKey]
 
-	model = _load_model()
-	result = None
-	if model is not None:
-		try:
-			labels, probabilities = model.predict(cleaned, k=2)
-			if labels and probabilities:
-				language = str(labels[0])
-				if language.startswith(_LABEL_PREFIX):
-					language = language[len(_LABEL_PREFIX):]
-				language = language.lower()
-				confidence = float(probabilities[0])
-				second = float(probabilities[1]) if len(probabilities) > 1 else 0.0
-				# Two-word samples need stronger evidence than normal phrases.
-				required = max(minimumConfidence, 0.78 if wordCount == 2 else minimumConfidence)
-				if (
-					language in allowedLanguages
-					and confidence >= required
-					and confidence - second >= minimumMargin
-				):
-					result = allowedLanguages[language]
-		except Exception as error:
-			log.debug(f"AutoTTS: fastText prediction failed: {error}")
-
-	_cache[cacheKey] = result
-	_cache.move_to_end(cacheKey)
-	while len(_cache) > _CACHE_LIMIT:
-		_cache.popitem(last=False)
-	return result
+	allowed_items = tuple(sorted(allowedLanguages.items()))
+	return _predict_cached(cleaned, allowed_items, wordCount, minimumConfidence, minimumMargin)
 
 
 def is_available() -> bool:

@@ -1,12 +1,14 @@
 # Changelog
 
-## 1.0.2
+## 1.1.0
 
-- Cancelling speech now stops only the voices that were speaking. Before, every cached voice was stopped on every key press, which could add a small delay.
-- Calls that take longer than 3 ms are written to the NVDA log at debug level, so reports of late speech can be traced.
-- Rewrote the user guide. The help page inside NVDA is now generated from the README.
-- Added a feature request form and a log field to the bug report form.
-- The project moved to https://github.com/hamid7780/Auto-TTS-for-NVDA.
+- Fixed speech queue deadlocks and dropped speech during rapid typing (e.g. typing space then dot), list navigation, and language transitions (e.g. English followed by Urdu or Hindi).
+- Fixed ETI Eloquence 16kHz audio stuttering and buffer resets by introducing consecutive speech chunk merging and dirty-state property checks.
+- Fixed Voice combo box in profile editor dialog so saved voices (such as American English) and synthesizer native configured voices are strictly respected rather than arbitrarily defaulting to British English.
+- Simplified large numbers reading options into a clean two-choice dropdown (Western Million/Billion vs Indian Lakh/Crore) and streamlined number settings.
+- Added offline shared-script regional language disambiguation for Perso-Arabic (Urdu, Arabic, Persian), Devanagari (Hindi, Marathi, Nepali), and Bengali with character heuristics and n-gram models.
+- Added pure-Python language detection fallback if binary FastText runtimes are unavailable.
+- Added continuous lightweight diagnostic activity logging to Auto TTS log.txt with privacy redaction and NVDA Preferences menu shortcut.
 
 ## 1.0.1
 

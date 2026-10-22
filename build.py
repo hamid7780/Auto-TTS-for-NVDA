@@ -45,7 +45,7 @@ def build(output_dir, expected_version=None):
         for path in sorted((ROOT / directory).rglob("*")):
             if not path.is_file() or "__pycache__" in path.parts:
                 continue
-            if path.suffix not in (".py", ".pyd", ".ftz", ".txt", ".html", ".css", ".mo", ".ini"):
+            if path.suffix not in (".py", ".pyd", ".ftz", ".txt", ".html", ".css", ".mo", ".ini", ".json"):
                 continue
             entries[path.relative_to(ROOT).as_posix()] = path
     for required in REQUIRED:
