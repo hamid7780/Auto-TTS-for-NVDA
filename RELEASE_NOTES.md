@@ -1,11 +1,13 @@
 ## What's new in 1.1.0
 
-- **Fixed speech queue deadlocks and dropped speech**: Typing rapidly (such as typing space followed by a symbol or dot), navigating lists, or switching between languages (e.g. English followed by Urdu or Hindi) no longer silences speech or freezes the speech queue.
-- **Fixed ETI Eloquence 16kHz audio stuttering**: Consecutive speech chunks using the same voice are now merged into a single call, and voice properties are only reassigned when they actually change to prevent internal buffer resets.
-- **Fixed voice auto-selection in Profile Editor**: Configured voices (such as American English) and synthesizer defaults are strictly preserved rather than arbitrarily defaulting to British English.
-- **Simplified number reading**: Consolidated large number settings into a single clean choice between Western standard (Millions, Billions) and Indian system (Lakh, Crore), with full support for regional Unicode digits.
-- **Improved shared-script regional language detection**: Added offline character heuristics and n-gram models for Perso-Arabic (Urdu, Arabic, Persian), Devanagari (Hindi, Marathi, Nepali), and Bengali.
-- **Diagnostic activity logging**: Added lightweight diagnostic logging with privacy redaction and an NVDA Preferences shortcut for quick access.
+Version 1.1.0 is a major update to Auto TTS for NVDA, bringing core audio engine optimizations, improved multilingual detection, and enhanced synthesizer stability:
+
+- **ETI Eloquence 16kHz audio stutter fix**: Consecutive speech chunks using the same voice are now merged into a single call, and synthesizer properties are only updated when they change, preventing audio buffer resets and crackling.
+- **Instant voice loading and smart voice matching**: Fixed voice list population in the settings dialog, cached voices across synthesizers for instantaneous switching without UI delay, and introduced smart language-to-voice auto-matching while strictly respecting saved profile selections.
+- **Offline shared-script language disambiguation**: Added dedicated offline n-gram models and character heuristics to accurately distinguish Perso-Arabic languages (Urdu, Arabic, Persian), Devanagari languages (Hindi, Marathi, Nepali), and Bengali. Includes a pure-Python fallback for systems without native FastText binaries.
+- **Enhanced number processing**: Added support for regional Unicode digits (Eastern Arabic/Urdu, Devanagari), preserved formatted numbers (decimals, dates, phone numbers) as continuous tokens, and simplified large number reading into a clean choice between Western (Millions/Billions) and Indian (Lakh/Crore) numbering systems.
+- **Diagnostic activity logging**: Added lightweight activity logging to "Auto TTS log.txt" in your Documents folder with automatic privacy redaction of spoken text and a convenient shortcut under NVDA Preferences.
+- **Synthesizer stability and Say All support**: Improved index forwarding for continuous reading in Say All (NVDA+DownArrow), bypassed complex language models during single-character and spelling navigation to prevent accent glitches, and added recursive engine guards.
 
 ## About Auto TTS for NVDA
 

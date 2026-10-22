@@ -2,13 +2,15 @@
 
 ## 1.1.0
 
-- Fixed speech queue deadlocks and dropped speech during rapid typing (e.g. typing space then dot), list navigation, and language transitions (e.g. English followed by Urdu or Hindi).
-- Fixed ETI Eloquence 16kHz audio stuttering and buffer resets by introducing consecutive speech chunk merging and dirty-state property checks.
-- Fixed Voice combo box in profile editor dialog so saved voices (such as American English) and synthesizer native configured voices are strictly respected rather than arbitrarily defaulting to British English.
-- Simplified large numbers reading options into a clean two-choice dropdown (Western Million/Billion vs Indian Lakh/Crore) and streamlined number settings.
-- Added offline shared-script regional language disambiguation for Perso-Arabic (Urdu, Arabic, Persian), Devanagari (Hindi, Marathi, Nepali), and Bengali with character heuristics and n-gram models.
-- Added pure-Python language detection fallback if binary FastText runtimes are unavailable.
-- Added continuous lightweight diagnostic activity logging to Auto TTS log.txt with privacy redaction and NVDA Preferences menu shortcut.
+- Major release introducing significant audio engine improvements, enhanced language detection, and stability updates.
+- Fixed ETI Eloquence 16kHz audio stuttering and buffer resets through consecutive speech chunk merging and dirty-state property checks.
+- Fixed voice selection in Profile Editor: cached available voices per synthesizer for instant loading, fixed the "Default Voice" bug, and added smart voice matching for selected languages while strictly preserving saved choices.
+- Added offline shared-script regional language disambiguation with character heuristics and n-gram models for Perso-Arabic (Urdu, Arabic, Persian), Devanagari (Hindi, Marathi, Nepali), and Bengali.
+- Added pure-Python language detection fallback if binary FastText runtimes cannot be loaded.
+- Added FastText detection caching (LRU cache) to eliminate UI latency on repeated words and phrases.
+- Enhanced number processing: added support for regional Unicode digits (Arabic, Urdu, Devanagari), preserved formatted numbers as single unbroken units, and simplified large numbers reading into a clean choice between Western (Millions/Billions) and Indian (Lakh/Crore) numbering systems.
+- Added lightweight diagnostic activity logging to "Auto TTS log.txt" in Documents with automated privacy redaction and an NVDA Preferences menu shortcut.
+- Improved synthesizer stability: reliable Say All (NVDA+DownArrow) index forwarding, FastText bypass during single-character and spelling mode, recursive synthesizer exclusion guard, and clean sub-synthesizer termination on exit.
 
 ## 1.0.1
 
