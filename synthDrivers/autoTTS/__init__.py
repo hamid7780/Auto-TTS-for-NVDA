@@ -232,6 +232,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		self._synthCache: Dict[str, Any] = {}
 		self._usedSynths = []
 		self._synth = None
+		self._lastPreparedLang: Optional[str] = None
 		self._isSpeaking = False
 		self.speechQueue = queue.Queue()
 		self._markerCounter = itertools.count(1_500_000_000)
@@ -313,6 +314,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 	def loadSettings(self, onlyChanged=False):
 		"""Loads AutoTTS settings from NVDA config."""
 		sharedConfig.load()
+		self._lastPreparedLang = None  # force re-preparation after config reload
 		try:
 			systemLang = languageHandler.getLanguage().split("_")[0]
 		except Exception:
@@ -384,6 +386,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		if langConfig.useCustomProsody:
 			setattr(langConfig, customAttribute, val)
 			sharedConfig.setLanguageConfig(langConfig)
+			self._lastPreparedLang = None
 			return
 
 		synth = self._getSettingsSynth(settingsLang)
@@ -392,6 +395,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		try:
 			if getattr(synth, settingId, None) != val:
 				setattr(synth, settingId, val)
+				self._lastPreparedLang = None
 		except Exception:
 			return
 		self._saveUnderlyingSynthSetting(settingsLang, synth, settingId, val)
@@ -768,6 +772,13 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				pass
 
 	def _getSynth(self, lang: str):
+		# Fast path: if the same language was already prepared and its synth is
+		# still cached, skip config reads and property checks entirely.  This
+		# avoids touching the synth at all between consecutive same-language
+		# chunks which is critical for ETI Eloquence 16kHz stability.
+		if lang == self._lastPreparedLang and self._synth is not None:
+			return self._synth
+
 		langConfig = sharedConfig.getLanguageConfig(lang)
 		synthName = langConfig.synth
 		if not synthName or synthName in VIRTUAL_SYNTHS:
@@ -834,15 +845,27 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 
 			if not getattr(setting, "useConfig", True) or val is None:
 				continue
+			# Coerce config values (often stored as strings by configobj) to
+			# match the native type of the synth property so the dirty-state
+			# comparison below is reliable.  Without this, "80" != 80 in
+			# Python 3 and every prosody property gets reassigned on every
+			# speak() call, resetting ETI Eloquence's 16kHz audio buffer.
+			currentVal = getattr(synth, setting.id, None)
+			if currentVal is not None and type(val) is not type(currentVal):
+				try:
+					val = type(currentVal)(val)
+				except (TypeError, ValueError):
+					pass
 			# DIRTY STATE CHECK: Never reassign property if value already matches!
 			# This is the critical fix preventing ETI Eloquence 16kHz audio buffer resets.
-			if getattr(synth, setting.id, None) == val:
+			if currentVal == val:
 				continue
 			try:
 				setattr(synth, setting.id, val)
 			except Exception:
 				pass
 
+		self._lastPreparedLang = lang
 		return synth
 
 	def speak(self, speechSequence):
@@ -1120,4 +1143,5 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 			self._voice = voice
 			sharedConfig.defaultLang = voice
 			if changed:
+				self._lastPreparedLang = None
 				sharedConfig.save()
