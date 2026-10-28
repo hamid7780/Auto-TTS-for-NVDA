@@ -125,6 +125,13 @@ from .configManager import sharedConfig
 VIRTUAL_SYNTHS = voiceMatch.VIRTUAL_SYNTHS
 
 
+def _isLangChangeCommand(item):
+	return (
+		isinstance(item, (LangChangeCommand, languageDetection.LangChangeCommand))
+		or getattr(item, "__class__", None).__name__ == "LangChangeCommand"
+	)
+
+
 def _getSynthInstance(name: str):
 	"""Imports and instantiates an underlying NVDA synth driver by name."""
 	if not name or name in VIRTUAL_SYNTHS:
@@ -224,6 +231,8 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 	description = _("Auto TTS for NVDA")
 
 	supportedSettings = _buildSupportedSettings()
+	_activePreparedLang = None
+	_lastPreparedLang = None
 
 	def __init__(self):
 		self._doneSpeakingFlag = threading.Event()
@@ -233,6 +242,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		self._usedSynths = []
 		self._synth = None
 		self._lastPreparedLang: Optional[str] = None
+		self._activePreparedLang: Optional[str] = None
 		self._isSpeaking = False
 		self.speechQueue = queue.Queue()
 		self._markerCounter = itertools.count(1_500_000_000)
@@ -293,6 +303,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 			pass
 
 		self._synth = None
+		self._activePreparedLang = None
 		self._isSpeaking = False
 
 		# Only terminate child synths if this instance was actively used
@@ -592,7 +603,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		out = []
 		for item in speechSequence:
 			if (
-				isinstance(item, LangChangeCommand)
+				_isLangChangeCommand(item)
 				and item.lang
 				and item.lang.replace("_", "-").split("-")[0].lower() == primary
 			):
@@ -605,6 +616,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		self._activeLanguage = lang
 		startedAt = time.perf_counter()
 		self._synth = self._getSynth(lang)
+		self._activePreparedLang = lang
 		_logIfSlow("preparing the voice", startedAt, f"(language {lang})")
 		self._markSynthUsed(self._synth)
 		if self._synth is None:
@@ -777,13 +789,6 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				pass
 
 	def _getSynth(self, lang: str):
-		# Fast path: if the same language was already prepared and its synth is
-		# still cached, skip config reads and property checks entirely.  This
-		# avoids touching the synth at all between consecutive same-language
-		# chunks which is critical for ETI Eloquence 16kHz stability.
-		if lang == self._lastPreparedLang and self._synth is not None:
-			return self._synth
-
 		langConfig = sharedConfig.getLanguageConfig(lang)
 		synthName = langConfig.synth
 		if not synthName or synthName in VIRTUAL_SYNTHS:
@@ -793,6 +798,17 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				synthName = defCfg.synth
 			if not synthName or synthName in VIRTUAL_SYNTHS:
 				synthName = "espeak"
+
+		# Fast path: if the currently active synth is already prepared for this
+		# exact language profile, skip config reads and property checks entirely.
+		# This avoids touching the synth at all between consecutive same-language
+		# chunks which is critical for ETI Eloquence 16kHz stability.
+		if (
+			self._activePreparedLang == lang
+			and self._synth is not None
+			and getattr(self._synth, "name", "") == synthName
+		):
+			return self._synth
 
 		synth = self._getSynthByName(synthName)
 		if synth is None:
@@ -870,7 +886,6 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 			except Exception:
 				pass
 
-		self._lastPreparedLang = lang
 		return synth
 
 	def speak(self, speechSequence):
@@ -899,7 +914,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				langConfig = sharedConfig.getLanguageConfig(targetLang)
 				cleanSeq = []
 				for item in speechSequence:
-					if not isinstance(item, LangChangeCommand):
+					if not _isLangChangeCommand(item):
 						cleanSeq.append(item)
 				if langConfig.sendLang:
 					cleanSeq.insert(0, LangChangeCommand(baseLang))
@@ -914,7 +929,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				langConfig = sharedConfig.getLanguageConfig(targetLang)
 				cleanSeq = []
 				for item in speechSequence:
-					if not isinstance(item, LangChangeCommand):
+					if not _isLangChangeCommand(item):
 						cleanSeq.append(item)
 				if langConfig.sendLang:
 					cleanSeq.insert(0, LangChangeCommand(baseLang))
@@ -964,7 +979,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 			expandedSequence = []
 			curRunLang = self._voice
 			for item in preprocessedSequence:
-				if isinstance(item, LangChangeCommand):
+				if _isLangChangeCommand(item):
 					curRunLang = item.lang or self._voice
 					expandedSequence.append(item)
 				elif isinstance(item, str):
@@ -1026,7 +1041,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 					newSpeechSequence.append(item)
 					hasText = True
 
-				elif isinstance(item, LangChangeCommand):
+				elif _isLangChangeCommand(item):
 					rawLang = item.lang
 					if rawLang is None:
 						newLang = self._voice
@@ -1111,6 +1126,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 			if hasattr(self, "_doneSpeakingFlag"):
 				self._doneSpeakingFlag.clear()
 			self._synth = None
+			self._activePreparedLang = None
 			if hasattr(self, "_doneSpeakingWatcher"):
 				self._doneSpeakingWatcher.watch(0.025)
 

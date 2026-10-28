@@ -318,6 +318,11 @@ class EnhancementsTests(unittest.TestCase):
 		self.assertFalse(d._usesPrivateEndMarker(IBMeCISynth(), ["this pc 2 of 30"]))
 		self.assertTrue(d._usesPrivateEndMarker(ESpeakSynth(), ["hello world"]))
 
+	def test_activity_log_max_bytes_capped_at_one_megabyte(self):
+		from synthDrivers.autoTTS import activityLog
+		self.assertEqual(activityLog._MAX_BYTES, 1 * 1024 * 1024)
+		self.assertEqual(activityLog._MAX_BYTES_DETAILED, 5 * 1024 * 1024)
+
 
 if __name__ == "__main__":
 	unittest.main()

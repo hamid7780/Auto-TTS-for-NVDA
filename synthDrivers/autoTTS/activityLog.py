@@ -14,8 +14,8 @@ except ImportError:
 			secure = False
 			configPath = ""
 
-_MAX_BYTES = 20 * 1024 * 1024           # 20 MB normal log
-_MAX_BYTES_DETAILED = 100 * 1024 * 1024  # 100 MB when 'include the spoken text' is on
+_MAX_BYTES = 1 * 1024 * 1024           # 1 MB normal log
+_MAX_BYTES_DETAILED = 5 * 1024 * 1024   # 5 MB when 'include the spoken text' is on
 _MAX_TEXT = 400
 
 _lock = threading.Lock()

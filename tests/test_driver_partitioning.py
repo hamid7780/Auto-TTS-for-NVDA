@@ -261,9 +261,18 @@ class CancelOnlyStopsUsedSynthsTests(unittest.TestCase):
 	class FakeChild:
 		def __init__(self):
 			self.cancelled = 0
+			self.spoken = []
+			self.supportedCommands = set()
+			self.supportedSettings = []
 
 		def cancel(self):
 			self.cancelled += 1
+
+		def speak(self, seq):
+			self.spoken.append(seq)
+
+		def isSupported(self, setting):
+			return False
 
 	def makeDriver(self):
 		synth = driver.SynthDriver.__new__(driver.SynthDriver)
@@ -273,6 +282,8 @@ class CancelOnlyStopsUsedSynthsTests(unittest.TestCase):
 		synth._synth = None
 		synth._synthCache = {}
 		synth._usedSynths = []
+		synth._activePreparedLang = None
+		synth._lastPreparedLang = None
 		synth.speechQueue = queue.Queue()
 		synth._activeMarker = None
 		synth._activeChunkId = 0
@@ -306,6 +317,97 @@ class CancelOnlyStopsUsedSynthsTests(unittest.TestCase):
 		synth.cancel()
 		self.assertEqual(child.cancelled, 1)
 		self.assertIsNone(synth._synth)
+
+	def test_mixed_utterance_auto_splits_and_routes_to_distinct_synths(self):
+		synth = self.makeDriver()
+		synth._voice = "en"
+		eloquence = self.FakeChild()
+		eloquence.name = "eloquence"
+		eloquence.supportedCommands = {languageDetection.IndexCommand}
+		google = self.FakeChild()
+		google.name = "googleTtsForNvda"
+		google.supportedCommands = set()
+
+		synth._synthCache["eloquence"] = (eloquence, {})
+		synth._synthCache["googleTtsForNvda"] = (google, {})
+		synth._getSynthByName = lambda name: eloquence if name == "eloquence" else google
+
+		cfg_en = sharedConfig.getLanguageConfig("en")
+		cfg_en.synth = "eloquence"
+		cfg_en.voice = ""
+		cfg_en.enabled = True
+
+		cfg_ur = sharedConfig.getLanguageConfig("ur-pk")
+		cfg_ur.synth = "googleTtsForNvda"
+		cfg_ur.voice = "ur-pk"
+		cfg_ur.enabled = True
+
+		sharedConfig.languages["en"] = cfg_en
+		sharedConfig.languages["ur-pk"] = cfg_ur
+		sharedConfig.languages["ur"] = cfg_ur
+
+		mixedText = "Auto TTS for NVDA \u0627\u06cc\u06a9 \u0627\u06cc\u0688 \u0622\u0646 \u06c1\u06d2"
+		synth.speak([mixedText])
+
+		# Chunk 1 (English) should be sent to eloquence
+		self.assertEqual(len(eloquence.spoken), 1)
+		self.assertEqual(len(google.spoken), 0)
+		self.assertEqual(synth._activeLanguage, "en")
+		self.assertEqual(synth._synth, eloquence)
+
+		# When eloquence completes chunk 1, chunk 2 (Urdu) must switch to Google TTS
+		synth._onSynthDoneSpeaking(eloquence)
+		self.assertEqual(len(eloquence.spoken), 1)
+		self.assertEqual(len(google.spoken), 1)
+		self.assertEqual(synth._activeLanguage, "ur")
+		self.assertEqual(synth._synth, google)
+
+		# When google finishes chunk 2, speech finishes cleanly
+		synth._onSynthDoneSpeaking(google)
+		self.assertFalse(synth._isSpeaking)
+		self.assertEqual(synth.speechQueue.qsize(), 0)
+
+	def test_prewarming_does_not_corrupt_subsequent_chunk_synth_lookup(self):
+		synth = self.makeDriver()
+		synth._voice = "en"
+		eloquence = self.FakeChild()
+		eloquence.name = "eloquence"
+		google = self.FakeChild()
+		google.name = "googleTtsForNvda"
+
+		synth._synthCache["eloquence"] = (eloquence, {})
+		synth._synthCache["googleTtsForNvda"] = (google, {})
+		synth._getSynthByName = lambda name: eloquence if name == "eloquence" else google
+
+		cfg_en = sharedConfig.getLanguageConfig("en")
+		cfg_en.synth = "eloquence"
+		cfg_en.voice = ""
+		cfg_en.enabled = True
+
+		cfg_ur = sharedConfig.getLanguageConfig("ur-pk")
+		cfg_ur.synth = "googleTtsForNvda"
+		cfg_ur.voice = "ur-pk"
+		cfg_ur.enabled = True
+
+		sharedConfig.languages["en"] = cfg_en
+		sharedConfig.languages["ur-pk"] = cfg_ur
+		sharedConfig.languages["ur"] = cfg_ur
+
+		# Start chunk with eloquence
+		synth._startChunk("en", ["English Text"])
+		self.assertEqual(synth._synth, eloquence)
+		self.assertEqual(synth._activePreparedLang, "en")
+
+		# Prewarm next synth for Urdu
+		synth._getSynth("ur-pk")
+		# Crucial check: active synth and active prepared language must NOT have changed!
+		self.assertEqual(synth._synth, eloquence)
+		self.assertEqual(synth._activePreparedLang, "en")
+
+		# Now start chunk for Urdu: must resolve to Google TTS, NOT Eloquence!
+		synth._startChunk("ur-pk", ["\u0627\u0631\u062f\u0648 \u0645\u062a\u0646"])
+		self.assertEqual(synth._synth, google)
+		self.assertEqual(synth._activePreparedLang, "ur-pk")
 
 
 if __name__ == "__main__":

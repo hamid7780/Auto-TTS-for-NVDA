@@ -140,6 +140,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _onPreSpeech(self, speechSequence=None, **kwargs):
 		try:
+			if not activityLog.includeText():
+				return
 			synth = synthDriverHandler.getSynth()
 			name = synth.name if synth else None
 			settings = activityLog.describeSynth(synth) if synth else ""
