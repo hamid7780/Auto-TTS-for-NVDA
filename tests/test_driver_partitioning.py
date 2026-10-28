@@ -110,7 +110,7 @@ class DriverPartitioningTests(unittest.TestCase):
 			def speak(self, sequence):
 				self.sequences.append(sequence)
 
-		english = FakeSynth("eloquence")
+		english = FakeSynth("espeak")
 		urdu = FakeSynth("googleTtsForNvda")
 		preparedLanguages = []
 		def getSynth(lang):

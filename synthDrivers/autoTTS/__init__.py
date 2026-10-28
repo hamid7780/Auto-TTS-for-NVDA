@@ -481,7 +481,12 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 			pass
 
 	def _usesPrivateEndMarker(self, synth, sequence=None):
-		"""Whether this child can reliably return Auto TTS's trailing marker."""
+		"""Whether this child can reliably return Auto TTS's trailing marker.
+		Synths that have their own internal sentinel end markers (like Eloquence /
+		IBMeCI) must NEVER receive Auto TTS private trailing markers. In Eloquence,
+		an extra trailing marker steals pending audio from Eloquence's own 0xFFFF
+		sentinel, causing premature player.idle() calls that create an audible
+		stutter/chop at the end of every utterance."""
 		try:
 			if IndexCommand not in getattr(synth, "supportedCommands", set()):
 				return False
@@ -489,7 +494,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				getattr(synth, "name", ""),
 				getattr(type(synth), "__module__", ""),
 			).lower()
-			if "googlettsfornvda" in identity:
+			if any(k in identity for k in ("googlettsfornvda", "eloquence", "ibmeci", "eci", "openevv")):
 				return False
 			# Never use private end markers for empty or purely punctuation/symbol utterances:
 			# synthesizers produce no phonemes and drop IndexCommand on them.

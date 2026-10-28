@@ -300,6 +300,24 @@ class EnhancementsTests(unittest.TestCase):
 		sharedConfig.largeNumberFormat = "indian"
 		self.assertTrue(sharedConfig.croreLakhEnabled)
 
+	def test_eloquence_does_not_use_private_end_marker(self):
+		class EloquenceSynth:
+			name = "eloquence"
+			supportedCommands = {languageDetection.IndexCommand}
+
+		class IBMeCISynth:
+			name = "ibmeci"
+			supportedCommands = {languageDetection.IndexCommand}
+
+		class ESpeakSynth:
+			name = "espeak"
+			supportedCommands = {languageDetection.IndexCommand}
+
+		d = driver.SynthDriver()
+		self.assertFalse(d._usesPrivateEndMarker(EloquenceSynth(), ["desktop list"]))
+		self.assertFalse(d._usesPrivateEndMarker(IBMeCISynth(), ["this pc 2 of 30"]))
+		self.assertTrue(d._usesPrivateEndMarker(ESpeakSynth(), ["hello world"]))
+
 
 if __name__ == "__main__":
 	unittest.main()
