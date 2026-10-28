@@ -4,7 +4,7 @@ Auto TTS is an add-on for the NVDA screen reader. It looks at the text NVDA is a
 
 **[Download the latest release](https://github.com/hamid7780/Auto-TTS-for-NVDA/releases/latest)**
 
-Needs NVDA 2023.3 or newer, 32-bit or 64-bit. Last tested with NVDA 2026.2. Free software under the GPL-2.0 license.
+Needs NVDA 2023.3 or newer, 32-bit or 64-bit. Last tested with NVDA 2026.3. Free software under the GPL-2.0 license.
 
 ## What it does
 

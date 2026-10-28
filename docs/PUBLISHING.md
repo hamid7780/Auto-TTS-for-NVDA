@@ -50,7 +50,7 @@ Values to enter for the current release (replace the version with the one in `ma
 | Direct download | https://github.com/hamid7780/Auto-TTS-for-NVDA/releases/download/v1.1.0/autoTTS-1.1.0.nvda-addon |
 | License | GPL-2.0, with bundled MIT and CC-BY-SA-3.0 components |
 | Minimum NVDA | `2023.3` |
-| Last tested NVDA | `2026.2` |
+| Last tested NVDA | `2026.3` |
 
 Use the checksum attached to the release if the form requests it. Verify that
 the compatibility versions are accepted in the store's current API list.
