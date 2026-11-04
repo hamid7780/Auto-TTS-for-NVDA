@@ -103,7 +103,7 @@ In NVDA's synthesizer settings ring, the Voice setting moves between your langua
 
 ## Backup and where settings are kept
 
-Use **Export Settings** to back up your profiles or to copy them to another computer, and **Import Settings** to restore them. Settings are stored in the NVDA user configuration folder, usually `%APPDATA%\nvda`, in `addons\autoTTS.json`. A copy named `autoTTS.json.bak` is kept next to it.
+Use **Export Settings** to back up your profiles or to copy them to another computer, and **Import Settings** to restore them. Settings are stored in the NVDA user configuration folder, usually `%APPDATA%\nvda`, in `autoTTS.json`. A copy named `autoTTS.json.bak` is kept next to it.
 
 ## If something does not work
 

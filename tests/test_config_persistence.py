@@ -174,6 +174,40 @@ class ConfigPersistenceTests(unittest.TestCase):
 		finally:
 			self._cleanup(settingsPath)
 
+	def test_legacy_addons_autoTTS_json_is_migrated_and_removed_to_prevent_addon_store_crash(self):
+		settingsPath = self._newPath()
+		legacyPath = self._newPath()
+		# Remove settingsPath so it doesn't exist yet
+		if os.path.exists(settingsPath):
+			os.remove(settingsPath)
+		try:
+			legacyData = {
+				"defaultLang": "ur",
+				"languages": {
+					"ur": {"synth": "espeak", "voice": "ur", "enabled": True},
+				},
+			}
+			with open(legacyPath, "w", encoding="utf-8") as f:
+				json.dump(legacyData, f)
+			with open(legacyPath + ".bak", "w", encoding="utf-8") as f:
+				json.dump(legacyData, f)
+
+			with mock.patch.object(configManager, "_getSettingsFilePath", return_value=settingsPath), \
+			     mock.patch.object(configManager, "_getLegacySettingsFilePath", return_value=legacyPath):
+				cfg = AutoTTSConfig()
+
+			# 1. New settings file must now exist and contain migrated data
+			self.assertTrue(os.path.isfile(settingsPath))
+			self.assertIn("ur", cfg.languages)
+			self.assertEqual(cfg.defaultLang, "ur")
+
+			# 2. Legacy file and backup in addons/ must be deleted to prevent NVDA Add-on Store KeyError: 'addonId' crash
+			self.assertFalse(os.path.exists(legacyPath))
+			self.assertFalse(os.path.exists(legacyPath + ".bak"))
+		finally:
+			self._cleanup(settingsPath)
+			self._cleanup(legacyPath)
+
 
 if __name__ == "__main__":
 	unittest.main()

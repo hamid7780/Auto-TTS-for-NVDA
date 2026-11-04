@@ -43,17 +43,31 @@ DEFAULT_EXCLUDED_APPS = [
 
 
 def _getSettingsFilePath() -> str:
-	"""Return %appdata%/nvda/addons/autoTTS.json."""
+	"""Return %appdata%/nvda/autoTTS.json."""
 	try:
 		configDir = globalVars.appArgs.configPath
 		if configDir:
-			settingsDir = os.path.join(configDir, "addons")
-			if not os.path.isdir(settingsDir):
-				os.makedirs(settingsDir, exist_ok=True)
-			return os.path.join(settingsDir, "autoTTS.json")
+			return os.path.join(configDir, "autoTTS.json")
 	except Exception:
 		pass
 	return os.path.join(os.path.expanduser("~"), "autoTTS.json")
+
+
+def _getLegacySettingsFilePath() -> Optional[str]:
+	"""Return old %appdata%/nvda/addons/autoTTS.json path used in Auto TTS 1.0.
+
+	NVDA 2023.2+ Add-on Store treats any <addonId>.json directly inside the
+	'addons' folder as its own cached store metadata (InstalledAddonStoreModel).
+	Storing autoTTS.json in 'addons/' causes NVDA Add-on Store to crash with
+	KeyError: 'addonId' when opened!
+	"""
+	try:
+		configDir = globalVars.appArgs.configPath
+		if configDir:
+			return os.path.join(configDir, "addons", "autoTTS.json")
+	except Exception:
+		pass
+	return None
 
 
 @dataclass
@@ -102,7 +116,7 @@ class LanguageVoiceConfig:
 class AutoTTSConfig:
 	"""
 	Central configuration manager for Auto TTS.
-	Stored in %appdata%/nvda/addons/autoTTS.json.
+	Stored in %appdata%/nvda/autoTTS.json.
 	"""
 
 	def __init__(self):
@@ -239,9 +253,38 @@ class AutoTTSConfig:
 			log.error(f"AutoTTS: Cannot read settings file '{path}': {error}")
 			return None
 
+	def _migrateLegacySettings(self, settingsPath: str):
+		"""Migrates settings from legacy %appdata%/nvda/addons/autoTTS.json if present.
+
+		NVDA 2023.2+ Add-on Store treats any <addonId>.json directly inside the
+		'addons' folder as its own cached store metadata (InstalledAddonStoreModel).
+		Leaving autoTTS.json in 'addons/' causes NVDA's Add-on Store to crash with
+		KeyError: 'addonId' when opened!
+		"""
+		legacyPath = _getLegacySettingsFilePath()
+		if not legacyPath or not os.path.isfile(legacyPath):
+			return
+		try:
+			if not os.path.isfile(settingsPath):
+				shutil.copy2(legacyPath, settingsPath)
+				legacyBak = legacyPath + ".bak"
+				if os.path.isfile(legacyBak) and not os.path.isfile(settingsPath + ".bak"):
+					shutil.copy2(legacyBak, settingsPath + ".bak")
+			os.remove(legacyPath)
+			legacyBak = legacyPath + ".bak"
+			if os.path.isfile(legacyBak):
+				os.remove(legacyBak)
+			log.debug(f"AutoTTS: Migrated settings from '{legacyPath}' to '{settingsPath}'.")
+		except Exception as e:
+			try:
+				log.error(f"AutoTTS: Failed migrating legacy settings from '{legacyPath}': {e}")
+			except Exception:
+				pass
+
 	def load(self):
-		"""Loads settings from addons/autoTTS.json."""
+		"""Loads settings from autoTTS.json."""
 		settingsPath = _getSettingsFilePath()
+		self._migrateLegacySettings(settingsPath)
 		try:
 			data = self._readSettingsData(settingsPath)
 			backupPath = settingsPath + ".bak"
@@ -264,6 +307,15 @@ class AutoTTSConfig:
 		"""Saves settings to JSON file atomically."""
 		try:
 			settingsPath = _getSettingsFilePath()
+			legacyPath = _getLegacySettingsFilePath()
+			if legacyPath and os.path.isfile(legacyPath):
+				try:
+					os.remove(legacyPath)
+					legacyBak = legacyPath + ".bak"
+					if os.path.isfile(legacyBak):
+						os.remove(legacyBak)
+				except Exception:
+					pass
 			settingsDir = os.path.dirname(settingsPath)
 			if settingsDir and not os.path.isdir(settingsDir):
 				os.makedirs(settingsDir, exist_ok=True)
