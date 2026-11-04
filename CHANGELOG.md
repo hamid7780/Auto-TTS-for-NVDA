@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- Fixed NVDA Add-on Store crash: moved configuration file from `addons\autoTTS.json` to `autoTTS.json` in NVDA's user configuration folder, preventing collisions with NVDA's internal Add-on Store cache. Existing user profiles are automatically migrated and the conflicting file is cleanly removed.
+- Fixed mixed-language speech routing: resolved an issue where pre-warming during English playback could cause subsequent Urdu or secondary language chunks to be dropped or routed to the wrong synthesizer.
+- Optimized activity log: reduced maximum log size to 1 MB with automated rotation, and silenced background speech events when text logging is disabled.
+
 ## 1.1.0
 
 - Major release introducing significant audio engine improvements, enhanced language detection, and stability updates.
