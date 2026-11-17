@@ -4,7 +4,7 @@ Auto TTS is an add-on for the NVDA screen reader. It looks at the text NVDA is a
 
 **[Download the latest release](https://github.com/hamid7780/Auto-TTS-for-NVDA/releases/latest)**
 
-Needs NVDA 2023.3 or newer, 32-bit or 64-bit. Last tested with NVDA 2026.3. Free software under the GPL-2.0 license.
+Needs NVDA 2023.3 or newer, 32-bit or 64-bit. Last tested with NVDA 2026.3.1. Free software under the GPL-2.0 license.
 
 ## What it does
 
@@ -61,6 +61,8 @@ You can change these under Preferences, Input gestures, in the Auto TTS category
 | Switching granularity | Switch on every word, on every sentence or clause, or on every new line. |
 | Numbers reading voice / language | Read numbers in the current language, the default language, or always in English, Urdu, Arabic or Hindi. |
 | Mobile phone number pattern | Read mobile numbers as spaced digits, grouped clusters, or normal text. |
+| Date reading format | Read dates with month names (e.g. 20 November 2026), as digits, or with synthesizer default. |
+| Other numbers format | Read general numbers with synthesizer default, as individual spaced digits, or grouped in clusters. |
 | Large numbers format | Read large numbers in default/Western system (Millions, Billions) or Indian numbering system (Lakh, Crore). |
 | Diagnostic activity logging | Record speech events and synthesizer actions to Auto TTS log.txt in Documents. |
 | Excluded Applications | Programs where Auto TTS never switches voices. |

@@ -900,6 +900,21 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		finally:
 			_logIfSlow("speak", startedAt)
 
+	def _getActiveKeyboardLanguage(self) -> Optional[str]:
+		try:
+			import winUser
+			focus = api.getFocusObject()
+			threadId = getattr(focus, "windowThreadID", 0) if focus else 0
+			hkl = winUser.getKeyboardLayout(threadId)
+			langId = hkl & 0xFFFF
+			import locale
+			loc = locale.windows_locale.get(langId)
+			if loc:
+				return loc.split("_")[0].lower()
+		except Exception:
+			pass
+		return None
+
 	def _speak(self, speechSequence):
 		"""
 		Processes incoming speech sequence, applies number preprocessing,
@@ -937,17 +952,26 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 				self.pumpSpeech()
 				return
 
-			# 3. Pre-process numbers & mobile patterns
+			# 3. Pre-process dates, mobile patterns & other numbers
 			preprocessedSequence = []
 			for item in speechSequence:
 				if isinstance(item, str):
-					text = numberProcessing.reserve_mobile(item, sharedConfig.mobilePattern)
-					text = numberProcessing.rewrite_long_numbers(
-						text,
-						sharedConfig.longNumberMode,
-						sharedConfig.longNumberMinDigits,
-						sharedConfig.croreLakhEnabled
-					)
+					text = numberProcessing.reserve_dates(item, getattr(sharedConfig, "dateMode", "default"))
+					text = numberProcessing.reserve_mobile(text, sharedConfig.mobilePattern)
+					otherMode = getattr(sharedConfig, "otherNumberMode", "default")
+					if otherMode != "default":
+						text = numberProcessing.rewrite_other_numbers(
+							text,
+							otherMode,
+							crore_lakh=sharedConfig.croreLakhEnabled
+						)
+					else:
+						text = numberProcessing.rewrite_long_numbers(
+							text,
+							sharedConfig.longNumberMode,
+							sharedConfig.longNumberMinDigits,
+							sharedConfig.croreLakhEnabled
+						)
 					preprocessedSequence.append(text)
 				else:
 					preprocessedSequence.append(item)
@@ -973,9 +997,11 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 					tagMode=sharedConfig.tagMode,
 					useStatisticalDetection=sharedConfig.useStatisticalLanguageDetection,
 					statisticalLanguages=statisticalLanguages,
+					currentLang=self._activePreparedLang,
+					activeKeyboardLang=self._getActiveKeyboardLanguage(),
 				))
 
-			# 5. Expand mobile numbers and rewrite crore/lakh per-run
+			# 5. Expand reserved dates & mobile numbers, rewrite crore/lakh per-run
 			expandedSequence = []
 			curRunLang = self._voice
 			for item in preprocessedSequence:
@@ -983,7 +1009,10 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 					curRunLang = item.lang or self._voice
 					expandedSequence.append(item)
 				elif isinstance(item, str):
-					runText = numberProcessing.expand_reserved_mobile(item, sharedConfig.mobilePattern)
+					runText = numberProcessing.expand_reserved_dates(
+						item, getattr(sharedConfig, "dateMode", "default"), lang=curRunLang
+					)
+					runText = numberProcessing.expand_reserved_mobile(runText, sharedConfig.mobilePattern)
 					if sharedConfig.croreLakhEnabled:
 						base = languageDetection.get_base_language(curRunLang)
 						if base == "en":

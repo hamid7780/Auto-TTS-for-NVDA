@@ -41,16 +41,16 @@ Values to enter for the current release (replace the version with the one in `ma
 | --- | --- |
 | Add-on ID | `autoTTS` |
 | Display name | Auto TTS for NVDA |
-| Version | `1.1.1` |
+| Version | `1.1.2` |
 | Channel | `stable` |
 | Publisher account | `hamid7780` |
 | Author | Raja Hamid |
 | Source URL | https://github.com/hamid7780/Auto-TTS-for-NVDA |
 | Homepage | https://github.com/hamid7780/Auto-TTS-for-NVDA |
-| Direct download | https://github.com/hamid7780/Auto-TTS-for-NVDA/releases/download/v1.1.1/autoTTS-1.1.1.nvda-addon |
+| Direct download | https://github.com/hamid7780/Auto-TTS-for-NVDA/releases/download/v1.1.2/autoTTS-1.1.2.nvda-addon |
 | License | GPL-2.0, with bundled MIT and CC-BY-SA-3.0 components |
 | Minimum NVDA | `2023.3` |
-| Last tested NVDA | `2026.3` |
+| Last tested NVDA | `2026.3.1` |
 
 Use the checksum attached to the release if the form requests it. Verify that
 the compatibility versions are accepted in the store's current API list.

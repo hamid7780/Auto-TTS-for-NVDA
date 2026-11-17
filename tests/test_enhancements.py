@@ -323,6 +323,115 @@ class EnhancementsTests(unittest.TestCase):
 		self.assertEqual(activityLog._MAX_BYTES, 1 * 1024 * 1024)
 		self.assertEqual(activityLog._MAX_BYTES_DETAILED, 5 * 1024 * 1024)
 
+	def test_punjabi_script_differentiation(self):
+		from globalPlugins.autoTTS import settingsPanel
+		self.assertIn("Gurmukhi", settingsPanel._getLangName("pa"))
+		self.assertIn("Gurmukhi", settingsPanel._getLangName("pa-in"))
+		self.assertIn("Shahmukhi", settingsPanel._getLangName("pa-pk"))
+		self.assertIn("Shahmukhi", settingsPanel._getLangName("pnb"))
+		aliases = voiceMatch._ALIASES
+		self.assertIn("gurmukhi", aliases["pa"])
+		self.assertIn("shahmukhi", aliases["pa-pk"])
+		self.assertIn("shahmukhi", aliases["pnb"])
+
+	def test_symbol_routing_on_typing_and_deleting(self):
+		# Urdu khatma (۔) must route to 'ur'
+		seq = list(languageDetection.addDetectedLanguageCommands(
+			[languageDetection.CharacterModeCommand(True), "۔"],
+			defaultLang="en",
+		))
+		commands = [(type(x).__name__, getattr(x, "lang", str(x))) for x in seq]
+		self.assertEqual(commands, [
+			("CharacterModeCommand", "CharacterModeCommand(True)"),
+			("LangChangeCommand", "ur"),
+			("str", "۔"),
+		])
+
+		# Arabic comma (،) must route to 'ur'
+		seq = list(languageDetection.addDetectedLanguageCommands(
+			[languageDetection.CharacterModeCommand(True), "،"],
+			defaultLang="en",
+		))
+		self.assertEqual([getattr(x, "lang", None) for x in seq if isinstance(x, languageDetection.LangChangeCommand)], ["ur"])
+
+		# Arabic question mark (؟) must route to 'ur'
+		seq = list(languageDetection.addDetectedLanguageCommands(
+			[languageDetection.CharacterModeCommand(True), "؟"],
+			defaultLang="en",
+		))
+		self.assertEqual([getattr(x, "lang", None) for x in seq if isinstance(x, languageDetection.LangChangeCommand)], ["ur"])
+
+		# Devanagari Danda (।) must route to 'hi'
+		seq = list(languageDetection.addDetectedLanguageCommands(
+			[languageDetection.CharacterModeCommand(True), "।"],
+			defaultLang="en",
+		))
+		self.assertEqual([getattr(x, "lang", None) for x in seq if isinstance(x, languageDetection.LangChangeCommand)], ["hi"])
+
+		# Neutral symbol with active Urdu keyboard layout routes to 'ur'
+		seq = list(languageDetection.addDetectedLanguageCommands(
+			[languageDetection.CharacterModeCommand(True), "."],
+			defaultLang="en",
+			activeKeyboardLang="ur",
+		))
+		self.assertEqual([getattr(x, "lang", None) for x in seq if isinstance(x, languageDetection.LangChangeCommand)], ["ur"])
+
+	def test_date_and_other_number_formatting(self):
+		sample = "Meeting on 2026-11-17 or 20/09/2026."
+		reserved = numberProcessing.reserve_dates(sample, "month_name_day_year")
+		self.assertIn(numberProcessing.DATE_MARKER, reserved)
+		expanded_en = numberProcessing.expand_reserved_dates(reserved, "month_name_day_year", "en")
+		self.assertIn("November 17, 2026", expanded_en)
+		self.assertIn("September 20, 2026", expanded_en)
+
+		expanded_ur = numberProcessing.expand_reserved_dates(reserved, "month_name_day_year", "ur")
+		self.assertIn("نومبر 17, 2026", expanded_ur)
+		self.assertIn("ستمبر 20, 2026", expanded_ur)
+
+		# Day month year
+		expanded_dmy = numberProcessing.expand_reserved_dates(reserved, "day_month_year", "en")
+		self.assertIn("17 11 2026", expanded_dmy)
+		self.assertIn("20 9 2026", expanded_dmy)
+
+		# Other numbers formatting
+		text = "Year 2026 has 365 days."
+		digits_res = numberProcessing.rewrite_other_numbers(text, "digits", crore_lakh=False)
+		self.assertEqual(digits_res, "Year 2 0 2 6 has 3 6 5 days.")
+		grouped_res = numberProcessing.rewrite_other_numbers("1000000 items", "grouped", crore_lakh=False)
+		self.assertEqual(grouped_res, "1 000 000 items")
+
+	def test_mobile_regex_does_not_match_dates_or_standalone_years(self):
+		dates_and_years = [
+			"2026",
+			"2026-11-17",
+			"17-11-2026",
+			"2026/11/17",
+			"17/11/2026",
+			"2026-11-17 12:00",
+			"17-11-2026 12:30:00",
+		]
+		for item in dates_and_years:
+			self.assertEqual(numberProcessing.reserve_mobile(item, "spaces"), item)
+
+		real_mobiles = [
+			"03001234567",
+			"+923001234567",
+			"0300 1234567",
+			"0300-1234567",
+			"+92 300 1234567",
+			"9876543210",
+		]
+		for m in real_mobiles:
+			res = numberProcessing.reserve_mobile(m, "spaces")
+			self.assertIn(numberProcessing.MOBILE_MARKER, res)
+
+	def test_manifest_has_no_changelog_and_release_notes_clean(self):
+		from pathlib import Path
+		manifest_text = (Path(__file__).resolve().parents[1] / "manifest.ini").read_text(encoding="utf-8")
+		self.assertNotIn("changelog", manifest_text)
+		release_notes = (Path(__file__).resolve().parents[1] / "RELEASE_NOTES.md").read_text(encoding="utf-8")
+		self.assertNotIn("## About Auto TTS", release_notes)
+
 
 if __name__ == "__main__":
 	unittest.main()

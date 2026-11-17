@@ -6,6 +6,17 @@ import unicodedata
 
 # Private-Use-Area marker: unambiguous tag for reserved mobile numbers
 MOBILE_MARKER = "\uE000"
+# Private-Use-Area marker: unambiguous tag for reserved dates
+DATE_MARKER = "\uE001"
+
+MONTHS_EN = [
+	"", "January", "February", "March", "April", "May", "June",
+	"July", "August", "September", "October", "November", "December"
+]
+MONTHS_UR = [
+	"", "جنوری", "فروری", "مارچ", "اپریل", "مئی", "جون",
+	"جولائی", "اگست", "ستمبر", "اکتوبر", "نومبر", "دسمبر"
+]
 
 # Formatted number regex supporting ASCII and all Unicode decimal digits:
 # Matches dates (2026-10-17, 17/10/2026), times (11:45:07, 11:45 AM/PM),
@@ -20,8 +31,27 @@ _DATE_TIME_REGEX = re.compile(
 	r"(?![\w])"
 )
 
-# Mobile phone number: optional +CC followed by national number (10-12 digits with optional spaces or dashes)
-_MOBILE_REGEX = re.compile(r"(?<!\d)(?:(?:\+|00)(\d{1,3})[ -]?)?([0-9](?:[ -]?[0-9]){9,11})(?!\d)")
+# Standard dates (YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY)
+_DATE_REGEX = re.compile(
+	r"(?<![\w])"
+	r"(?:"
+	r"((?:19|20)\d{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12]\d|3[01])"
+	r"|"
+	r"(0?[1-9]|[12]\d|3[01])[-/.](0?[1-9]|1[0-2])[-/.]( (?:19|20)\d{2})".replace(" (", "(") +
+	r")"
+	r"(?![\w])"
+)
+
+_RESERVED_DATE_REGEX = re.compile(DATE_MARKER + r"(\d{4})\|(\d{1,2})\|(\d{1,2})\|([a-z]+)\|([/.-])")
+
+# Mobile phone number: optional +CC followed by national mobile number (10-12 digits with optional spaces or dashes).
+# Must strictly match valid phone formats and never match dates (YYYY-MM-DD or DD/MM/YYYY) or general 4-digit numbers.
+_MOBILE_REGEX = re.compile(
+	r"(?<![\w])"
+	r"(?:(?:\+|00)[1-9]\d{0,2}[ -]?)?"
+	r"(?:0\d{2,3}[ -]?\d{3}[ -]?\d{4}|0\d{2,3}[ -]?\d{6,8}|03\d{2}[ -]?\d{7}|3\d{2}[ -]?\d{7}|[6-9]\d{4}[ -]?\d{5}|0\d{9,10})"
+	r"(?![\w/.-])"
+)
 
 # Standard integer/decimal number: optionally comma-separated digits with optional decimal point
 _NUMBER_REGEX = re.compile(r"(\d+(?:,\d+)*)(\.\d+)?")
@@ -133,6 +163,91 @@ def expand_reserved_mobile(text: str, pattern: str = "spaces") -> str:
 			return " ".join(full)
 
 	return _RESERVED_MOBILE_REGEX.sub(_expand, text)
+
+
+def reserve_dates(text: str, mode: str = "default") -> str:
+	"""
+	Phase 1: Identifies dates and marks them with DATE_MARKER so they are not
+	broken up or misidentified by mobile or script segmentation.
+	"""
+	if mode == "default" or not mode:
+		return text
+
+	def _mark(m):
+		orig = m.group(0)
+		sep = "/" if "/" in orig else ("." if "." in orig else "-")
+		if m.group(1):
+			y, mo, d = m.group(1), m.group(2), m.group(3)
+			order = "ymd"
+		else:
+			d, mo, y = m.group(4), m.group(5), m.group(6)
+			order = "dmy"
+		return f"{DATE_MARKER}{y}|{mo}|{d}|{order}|{sep}"
+
+	return _DATE_REGEX.sub(_mark, text)
+
+
+def expand_reserved_dates(text: str, mode: str = "default", lang: str = "en") -> str:
+	"""
+	Phase 2: Expands DATE_MARKER into the user-selected date format.
+	"""
+	if DATE_MARKER not in text:
+		return text
+
+	def _expand(m):
+		y, mo_str, d_str, order, sep = m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)
+		y_int, mo_int, d_int = int(y), int(mo_str), int(d_str)
+		if mode == "default":
+			if order == "ymd":
+				return f"{y}{sep}{mo_str}{sep}{d_str}"
+			return f"{d_str}{sep}{mo_str}{sep}{y}"
+
+		base_lang = (lang or "en").lower().split("-")[0].split("_")[0]
+		months = MONTHS_UR if base_lang in ("ur", "pnb", "fa", "ar") else MONTHS_EN
+		mname = months[mo_int] if 1 <= mo_int <= 12 else mo_str
+
+		if mode == "day_month_name_year":
+			return f"{d_int} {mname} {y_int}"
+		elif mode == "month_name_day_year":
+			return f"{mname} {d_int}, {y_int}"
+		elif mode == "day_month_year":
+			return f"{d_int} {mo_int} {y_int}"
+		elif mode == "year_month_day":
+			return f"{y_int} {mo_int} {d_int}"
+		return m.group(0)
+
+	return _RESERVED_DATE_REGEX.sub(_expand, text)
+
+
+def rewrite_other_numbers(text: str, mode: str = "default", crore_lakh: bool = True) -> str:
+	"""
+	Formats general/other numbers according to chosen format.
+	- 'default': Synthesizer default reading (standard integers/numbers left alone).
+	- 'digits': Individual spaced digits (e.g. 1 2 3 4).
+	- 'grouped': Grouped in clusters of 3 digits.
+	"""
+	if mode == "default" or not mode or mode == "none":
+		return text
+
+	def _rewrite(m):
+		matched = m.group(0)
+		if MOBILE_MARKER in matched or DATE_MARKER in matched:
+			return matched
+		int_part = m.group(1)
+		frac_part = m.group(2) or ""
+		digits = _only_digits(int_part)
+		if not digits:
+			return matched
+		if crore_lakh and 6 <= len(digits) <= 9:
+			return matched
+		if mode == "digits":
+			return " ".join(digits) + frac_part
+		elif mode == "grouped":
+			groups = _group_from_right(digits, 3)
+			return " ".join(groups) + frac_part
+		return matched
+
+	return _NUMBER_REGEX.sub(_rewrite, text)
 
 
 def _group_long_numbers(text: str, mode: str, accept_func):

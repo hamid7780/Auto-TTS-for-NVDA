@@ -25,10 +25,59 @@ except ImportError:
 			def addItem(self, item): return item
 			def addLabeledControl(self, label, cls, **kwargs): return cls()
 	class wx:
+		ID_ANY = -1
+		ID_OK = 1
+		ID_CANCEL = 2
+		VERTICAL = 1
+		HORIZONTAL = 2
+		DEFAULT_DIALOG_STYLE = 0
+		RESIZE_BORDER = 0
+		OK = 1
+		CANCEL = 2
+		YES = 1
+		NO = 2
+		YES_NO = 3
+		ICON_QUESTION = 0
+		ICON_INFORMATION = 0
+		ICON_WARNING = 0
+		ICON_ERROR = 0
+		NOT_FOUND = -1
+		EVT_BUTTON = None
+		EVT_CHOICE = None
+		EVT_CHECKBOX = None
+		EVT_TEXT = None
+		EVT_TIMER = None
+		class Dialog:
+			def __init__(self, *args, **kwargs): pass
+			def Fit(self): pass
+			def CentreOnScreen(self): pass
+			def Destroy(self): pass
+		class SingleChoiceDialog:
+			def __init__(self, *args, **kwargs): pass
+		class Panel:
+			def __init__(self, *args, **kwargs): pass
+		class BoxSizer:
+			def __init__(self, *args, **kwargs): pass
+			def Add(self, *args, **kwargs): pass
 		class SpinCtrl:
 			def __init__(self, *args, **kwargs): pass
 			def GetValue(self): return 5
 			def SetValue(self, val): pass
+		class Choice:
+			def __init__(self, *args, **kwargs): pass
+			def SetSelection(self, idx): pass
+			def GetSelection(self): return 0
+		class CheckBox:
+			def __init__(self, *args, **kwargs): pass
+			def GetValue(self): return True
+			def SetValue(self, val): pass
+		class Button:
+			def __init__(self, *args, **kwargs): pass
+			def Bind(self, *args, **kwargs): pass
+		class Timer:
+			def __init__(self, *args, **kwargs): pass
+			def Start(self, *args, **kwargs): pass
+			def Stop(self): pass
 	class speech:
 		@staticmethod
 		def speak(seq): pass
@@ -111,7 +160,9 @@ BASE_WORLD_LANGUAGES: List[Tuple[str, str]] = sorted([
 	("mr", "Marathi (मराठी)"),
 	("ne", "Nepali (नेपाली)"),
 	("no", "Norwegian (Norsk)"),
-	("pa", "Punjabi (ਪੰਜਾਬੀ)"),
+	("pa", "Punjabi (Gurmukhi) (ਪੰਜਾਬੀ)"),
+	("pa-pk", "Punjabi (Shahmukhi) (پنجابی)"),
+	("pnb", "Western Punjabi (Shahmukhi) (پنجابی)"),
 	("ps", "Pashto (پښتو)"),
 	("fa", "Persian (فارسی)"),
 	("pl", "Polish (Polski)"),
@@ -173,6 +224,10 @@ SAMPLE_TEXTS: Dict[str, str] = {
 	"ar": "هذه رسالة اختبار لنظام تحويل النص إلى كلام التلقائي.",
 	"en": "This is a test of Auto TTS for NVDA. Speech rate and voice settings are verified.",
 	"hi": "यह ऑटो टीटीएस का परीक्षण संदेश है। ध्वनि और गति की पुष्टि हो रही है।",
+	"pa": "ਇਹ ਆਟੋ ਟੀਟੀਐਸ ਦਾ ਟੈਸਟ ਸੁਨੇਹਾ ਹੈ। ਆਵਾਜ਼ ਅਤੇ ਗਤੀ ਦੀ ਪੁਸ਼ਟੀ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ।",
+	"pa-in": "ਇਹ ਆਟੋ ਟੀਟੀਐਸ ਦਾ ਟੈਸਟ ਸੁਨੇਹਾ ਹੈ। ਆਵਾਜ਼ ਅਤੇ ਗਤੀ ਦੀ ਪੁਸ਼ਟੀ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ।",
+	"pa-pk": "ایہہ آٹو ٹی ٹی ایس دا ٹیسٹ سنیہا اے۔ آواز تے رفتار دی تصدیق کیتی جا رہی اے۔",
+	"pnb": "ایہہ آٹو ٹی ٹی ایس دا ٹیسٹ سنیہا اے۔ آواز تے رفتار دی تصدیق کیتی جا رہی اے۔",
 	"fa": "این یک پیام آزمایشی برای تبدیل متن به گفتار است.",
 	"ps": "دا د متن څخه د خبرو کولو ازموینې پیغام دی.",
 	"es": "Este es un mensaje de prueba para Auto TTS en NVDA.",
@@ -213,10 +268,24 @@ TAG_MODES: List[Tuple[str, str]] = [
 ]
 
 MOBILE_PATTERNS: List[Tuple[str, str]] = [
-	("none", _("None")),
+	("none", _("Default (Use synthesizer reading)")),
 	("spaces", _("Spaced digits (e.g. 0 3 0 0)")),
 	("grouped", _("Grouped digits (e.g. 0300 1234567)")),
 	("words", _("Spoken words")),
+]
+
+DATE_MODES: List[Tuple[str, str]] = [
+	("default", _("Default (Use synthesizer reading)")),
+	("day_month_name_year", _("Day Month name Year (e.g. 20 November 2026)")),
+	("month_name_day_year", _("Month name Day, Year (e.g. November 20, 2026)")),
+	("day_month_year", _("Day Month Year digits (e.g. 20 11 2026)")),
+	("year_month_day", _("Year Month Day digits (e.g. 2026 11 20)")),
+]
+
+OTHER_NUMBER_MODES: List[Tuple[str, str]] = [
+	("default", _("Default (Use synthesizer reading)")),
+	("digits", _("Individual spaced digits (e.g. 1 2 3 4)")),
+	("grouped", _("Grouped in clusters of 3 digits (e.g. 1 000 000)")),
 ]
 
 LARGE_NUMBER_SYSTEMS: List[Tuple[str, str]] = [
@@ -255,8 +324,13 @@ def _getInstalledSynths() -> List[Tuple[str, str]]:
 
 def _getLangName(code: str) -> str:
 	"""Gets display name for a language code."""
+	norm = str(code or "").strip().lower().replace("_", "-")
+	if norm in ("pa", "pa-in", "pa-guru"):
+		return _("Punjabi (Gurmukhi) (ਪੰਜਾਬੀ)")
+	if norm in ("pa-pk", "pnb", "pa-arab"):
+		return _("Punjabi (Shahmukhi) (پنجابی)")
 	for c, name in BASE_WORLD_LANGUAGES:
-		if c == code:
+		if c.lower() == norm:
 			return name
 	try:
 		return languageHandler.getLanguageDescription(code) or code
@@ -1073,6 +1147,26 @@ class AutoTTSSettingsPanel(SettingsPanel):
 			mobIdx = next((i for i, (c, _) in enumerate(MOBILE_PATTERNS) if c == sharedConfig.mobilePattern), 0)
 			self.mobilePatternChoice.SetSelection(mobIdx)
 
+			# Date Reading Format
+			dateLabels = [m[1] for m in DATE_MODES]
+			self.dateModeChoice = sHelper.addLabeledControl(
+				_("&Date reading format:"),
+				wx.Choice,
+				choices=dateLabels
+			)
+			dateIdx = next((i for i, (c, _) in enumerate(DATE_MODES) if c == getattr(sharedConfig, "dateMode", "default")), 0)
+			self.dateModeChoice.SetSelection(dateIdx)
+
+			# Other Numbers Format
+			otherNumberLabels = [m[1] for m in OTHER_NUMBER_MODES]
+			self.otherNumberModeChoice = sHelper.addLabeledControl(
+				_("&Other numbers format:"),
+				wx.Choice,
+				choices=otherNumberLabels
+			)
+			otherNumIdx = next((i for i, (c, _) in enumerate(OTHER_NUMBER_MODES) if c == getattr(sharedConfig, "otherNumberMode", "default")), 0)
+			self.otherNumberModeChoice.SetSelection(otherNumIdx)
+
 			# Large Numbers Numbering System (combines Indian Lakh/Crore vs Western Million/Billion)
 			largeNumLabels = [m[1] for m in LARGE_NUMBER_SYSTEMS]
 			self.largeNumberSystemChoice = sHelper.addLabeledControl(
@@ -1244,6 +1338,12 @@ class AutoTTSSettingsPanel(SettingsPanel):
 
 					mobIdx = next((i for i, (c, _) in enumerate(MOBILE_PATTERNS) if c == sharedConfig.mobilePattern), 0)
 					self.mobilePatternChoice.SetSelection(mobIdx)
+
+					dateIdx = next((i for i, (c, _) in enumerate(DATE_MODES) if c == getattr(sharedConfig, "dateMode", "default")), 0)
+					self.dateModeChoice.SetSelection(dateIdx)
+
+					otherNumIdx = next((i for i, (c, _) in enumerate(OTHER_NUMBER_MODES) if c == getattr(sharedConfig, "otherNumberMode", "default")), 0)
+					self.otherNumberModeChoice.SetSelection(otherNumIdx)
 
 					self.largeNumberSystemChoice.SetSelection(1 if getattr(sharedConfig, "croreLakhEnabled", True) else 0)
 					self.loggingCheck.SetValue(bool(getattr(sharedConfig, "loggingEnabled", True)))
@@ -1494,6 +1594,8 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				sharedConfig.save(allowEmptyProfiles=True)
 
 				sharedConfig.mobilePattern = "none"
+				sharedConfig.dateMode = "default"
+				sharedConfig.otherNumberMode = "default"
 				sharedConfig.longNumberMode = "digits"
 				sharedConfig.longNumberMinDigits = 5
 				sharedConfig.croreLakhEnabled = False
@@ -1514,6 +1616,8 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				self.tagModeChoice.SetSelection(0)
 				self.numberModeChoice.SetSelection(0)
 				self.mobilePatternChoice.SetSelection(0)
+				self.dateModeChoice.SetSelection(0)
+				self.otherNumberModeChoice.SetSelection(0)
 				self.largeNumberSystemChoice.SetSelection(1 if getattr(sharedConfig, "croreLakhEnabled", True) else 0)
 				self.loggingCheck.SetValue(True)
 				self.logIncludeTextCheck.SetValue(False)
@@ -1581,6 +1685,14 @@ class AutoTTSSettingsPanel(SettingsPanel):
 			mobIdx = self.mobilePatternChoice.GetSelection()
 			if 0 <= mobIdx < len(MOBILE_PATTERNS):
 				sharedConfig.mobilePattern = MOBILE_PATTERNS[mobIdx][0]
+
+			dateIdx = self.dateModeChoice.GetSelection()
+			if 0 <= dateIdx < len(DATE_MODES):
+				sharedConfig.dateMode = DATE_MODES[dateIdx][0]
+
+			otherNumIdx = self.otherNumberModeChoice.GetSelection()
+			if 0 <= otherNumIdx < len(OTHER_NUMBER_MODES):
+				sharedConfig.otherNumberMode = OTHER_NUMBER_MODES[otherNumIdx][0]
 
 			largeNumIdx = self.largeNumberSystemChoice.GetSelection()
 			if 0 <= largeNumIdx < len(LARGE_NUMBER_SYSTEMS):

@@ -251,9 +251,14 @@ def get_char_type(c: str, protect_math: bool = True) -> str:
 		return "space"
 	if protect_math and (cp in GREEK_LETTERS or c in MATH_SYMBOLS):
 		return "math"
+	if cp in URDU_EXCLUSIVE_CHARS:
+		return "Arabic"
+	script = get_script(cp)
+	if script not in ("Common", "Inherited"):
+		return script
 	if category.startswith("P") or category.startswith("S"):
 		return "punct"
-	return get_script(cp)
+	return script
 
 
 def _single_text_script(text: str, protect_math: bool = True) -> Optional[str]:
@@ -384,6 +389,8 @@ def addDetectedLanguageCommands(
 	useStatisticalDetection=True,
 	statisticalLanguages=None,
 	statisticalDetector=None,
+	currentLang=None,
+	activeKeyboardLang=None,
 ):
 	"""
 	Segments speech sequences by script and language with support for:
@@ -395,7 +402,7 @@ def addDetectedLanguageCommands(
 	if scriptSettings is None:
 		scriptSettings = dict(DEFAULT_SCRIPT_MAPPINGS)
 
-	curLang = defaultLang
+	curLang = currentLang or defaultLang
 	buffer = []
 	explicitLangActive = False
 	characterModeActive = False
@@ -567,6 +574,14 @@ def addDetectedLanguageCommands(
 
 		for stype, stext, clauseScript, clauseTarget in segments:
 			if stype in ("space", "punct", "Common", "Inherited"):
+				if characterModeActive and activeKeyboardLang and stype != "space":
+					targetLang = activeKeyboardLang
+					if targetLang != curLang:
+						flushed = flush()
+						if flushed:
+							yield flushed
+						curLang = targetLang
+						yield LangChangeCommand(curLang)
 				buffer.append(stext)
 				continue
 

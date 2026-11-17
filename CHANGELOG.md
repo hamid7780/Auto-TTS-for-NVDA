@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.2
+
+- Differentiated Punjabi scripts: separated Punjabi (Gurmukhi) (India) and Punjabi (Shahmukhi) (Pakistan) with clear native naming in settings and language selection.
+- Fixed symbol routing during typing and deletion: language-specific punctuation and symbols (such as Urdu khatma `۔`, Arabic comma `،`, and question mark `؟`) now correctly route to the matching language synthesizer rather than remaining silent or falling back to English.
+- Added dedicated Date reading format options: dates (e.g. 2026-11-17, 17/11/2026) can now be spoken with localized month names, as digits, or left to synthesizer default.
+- Added dedicated Other numbers format options: separate control for general numbers (synthesizer default, spaced digits, or grouped clusters).
+- Fixed mobile phone number matching: refined mobile regex so dates, timestamps, and 4-digit years are never incorrectly matched or read as spaced digits.
+- Tested and verified fully compatible with NVDA 2026.3.1.
+
 ## 1.1.1
 
 - Fixed NVDA Add-on Store crash: moved configuration file from `addons\autoTTS.json` to `autoTTS.json` in NVDA's user configuration folder, preventing collisions with NVDA's internal Add-on Store cache. Existing user profiles are automatically migrated and the conflicting file is cleanly removed.

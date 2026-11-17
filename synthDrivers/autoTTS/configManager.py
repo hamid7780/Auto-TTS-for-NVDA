@@ -126,7 +126,9 @@ class AutoTTSConfig:
 		self.defaultLang: str = ""
 		self.smartUrduArabic: bool = True
 		self.numberMode: str = "current"
-		self.mobilePattern: str = "5-5"
+		self.mobilePattern: str = "none"
+		self.dateMode: str = "default"
+		self.otherNumberMode: str = "default"
 		self.longNumberMode: str = "group_5"
 		self.longNumberMinDigits: int = 10
 		self.croreLakhEnabled: bool = True
@@ -161,6 +163,8 @@ class AutoTTSConfig:
 			"smartUrduArabic": self.smartUrduArabic,
 			"numberMode": self.numberMode,
 			"mobilePattern": self.mobilePattern,
+			"dateMode": self.dateMode,
+			"otherNumberMode": self.otherNumberMode,
 			"longNumberMode": self.longNumberMode,
 			"longNumberMinDigits": self.longNumberMinDigits,
 			"croreLakhEnabled": self.croreLakhEnabled,
@@ -195,7 +199,9 @@ class AutoTTSConfig:
 		self.defaultLang = str(data.get("defaultLang", ""))
 		self.smartUrduArabic = bool(data.get("smartUrduArabic", True))
 		self.numberMode = str(data.get("numberMode", "current"))
-		self.mobilePattern = str(data.get("mobilePattern", "5-5"))
+		self.mobilePattern = str(data.get("mobilePattern", "none"))
+		self.dateMode = str(data.get("dateMode", "default"))
+		self.otherNumberMode = str(data.get("otherNumberMode", "default"))
 		self.longNumberMode = str(data.get("longNumberMode", "group_5"))
 		self.longNumberMinDigits = int(data.get("longNumberMinDigits", 10))
 		if "largeNumberFormat" in data:
