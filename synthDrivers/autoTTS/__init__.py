@@ -34,6 +34,7 @@ try:
 	from logHandler import log
 	addonHandler.initTranslation()
 except ImportError:
+	api = None
 	class EspeakSynthDriver: name = "espeak"
 	class SilenceSynthDriver: name = "silence"
 	class VoiceInfo:
@@ -902,8 +903,11 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 
 	def _getActiveKeyboardLanguage(self) -> Optional[str]:
 		try:
+			api_mod = globals().get("api")
+			if not api_mod or not hasattr(api_mod, "getFocusObject"):
+				return None
 			import winUser
-			focus = api.getFocusObject()
+			focus = api_mod.getFocusObject()
 			threadId = getattr(focus, "windowThreadID", 0) if focus else 0
 			hkl = winUser.getKeyboardLayout(threadId)
 			langId = hkl & 0xFFFF
@@ -1004,8 +1008,12 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 			# 5. Expand reserved dates & mobile numbers, rewrite crore/lakh per-run
 			expandedSequence = []
 			curRunLang = self._voice
+			charModeActive = False
 			for item in preprocessedSequence:
-				if _isLangChangeCommand(item):
+				if isinstance(item, CharacterModeCommand):
+					charModeActive = getattr(item, "state", True)
+					expandedSequence.append(item)
+				elif _isLangChangeCommand(item):
 					curRunLang = item.lang or self._voice
 					expandedSequence.append(item)
 				elif isinstance(item, str):
@@ -1021,6 +1029,9 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 							runText = numberProcessing.rewrite_deferred_long_numbers(
 								runText, sharedConfig.longNumberMode, sharedConfig.longNumberMinDigits
 							)
+					runText = languageDetection.expand_spoken_symbols(
+						runText, curRunLang, characterMode=charModeActive
+					)
 					expandedSequence.append(runText)
 				else:
 					expandedSequence.append(item)

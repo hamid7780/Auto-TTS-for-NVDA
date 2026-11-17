@@ -28,6 +28,29 @@ except ImportError:
 	class log:
 		@staticmethod
 		def exception(msg): pass
+	class wx:
+		ID_ANY = -1
+		EVT_MENU = None
+		class SingleChoiceDialog:
+			def __init__(self, *args, **kwargs): pass
+			def SetSelection(self, sel): pass
+			def CentreOnScreen(self): pass
+			def GetSelection(self): return 0
+			def Destroy(self): pass
+		@staticmethod
+		def CallAfter(fn, *args, **kwargs): pass
+		@staticmethod
+		def CallLater(ms, fn, *args, **kwargs): pass
+	class gui:
+		mainFrame = None
+	class NVDASettingsDialog:
+		categoryClasses = []
+	class ui:
+		@staticmethod
+		def message(msg): pass
+	class synthDriverHandler:
+		@staticmethod
+		def getSynth(): return None
 
 from .settingsPanel import AutoTTSSettingsPanel, _getLangName
 from synthDrivers.autoTTS.configManager import sharedConfig

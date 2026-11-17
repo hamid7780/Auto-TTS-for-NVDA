@@ -324,11 +324,11 @@ class EnhancementsTests(unittest.TestCase):
 		self.assertEqual(activityLog._MAX_BYTES_DETAILED, 5 * 1024 * 1024)
 
 	def test_punjabi_script_differentiation(self):
-		from globalPlugins.autoTTS import settingsPanel
-		self.assertIn("Gurmukhi", settingsPanel._getLangName("pa"))
-		self.assertIn("Gurmukhi", settingsPanel._getLangName("pa-in"))
-		self.assertIn("Shahmukhi", settingsPanel._getLangName("pa-pk"))
-		self.assertIn("Shahmukhi", settingsPanel._getLangName("pnb"))
+		from globalPlugins.autoTTS.settingsPanel import _getLangName
+		self.assertIn("Gurmukhi", _getLangName("pa"))
+		self.assertIn("Gurmukhi", _getLangName("pa-in"))
+		self.assertIn("Shahmukhi", _getLangName("pa-pk"))
+		self.assertIn("Shahmukhi", _getLangName("pnb"))
 		aliases = voiceMatch._ALIASES
 		self.assertIn("gurmukhi", aliases["pa"])
 		self.assertIn("shahmukhi", aliases["pa-pk"])
@@ -375,6 +375,67 @@ class EnhancementsTests(unittest.TestCase):
 			activeKeyboardLang="ur",
 		))
 		self.assertEqual([getattr(x, "lang", None) for x in seq if isinstance(x, languageDetection.LangChangeCommand)], ["ur"])
+
+		# Spoken symbol name expansions:
+		self.assertEqual(languageDetection.expand_spoken_symbols("۔", "ur"), "ختمہ")
+		self.assertEqual(languageDetection.expand_spoken_symbols("۔", "ur", characterMode=True), "ختمہ")
+		self.assertEqual(languageDetection.expand_spoken_symbols("یہ ایک کتاب ہے۔", "ur"), "یہ ایک کتاب ہے۔")
+		self.assertEqual(languageDetection.expand_spoken_symbols(".", "ur", characterMode=True), "ختمہ")
+		self.assertEqual(languageDetection.expand_spoken_symbols("،", "ur"), "سکتہ")
+		self.assertEqual(languageDetection.expand_spoken_symbols("؟", "ur"), "سوالیہ نشان")
+		self.assertEqual(languageDetection.expand_spoken_symbols("۔", "ar"), "نقطة")
+		self.assertEqual(languageDetection.expand_spoken_symbols("।", "hi"), "पूर्ण विराम")
+		self.assertEqual(languageDetection.expand_spoken_symbols("।", "pa"), "ਡੰਡੀ")
+
+	def test_driver_speaks_spoken_symbol_name_for_khatma(self):
+		oldLanguages = sharedConfig.languages
+		oldDefault = sharedConfig.defaultLang
+		oldEnabled = sharedConfig.enabled
+		sharedConfig.defaultLang = "en"
+		sharedConfig.enabled = True
+		sharedConfig.languages = {
+			"en": LanguageVoiceConfig("en", synth="fakeSynth", voice="v1"),
+			"ur": LanguageVoiceConfig("ur", synth="fakeSynth", voice="v2"),
+		}
+
+		class MockSynth:
+			name = "fakeSynth"
+			voice = "v2"
+			supportedCommands = {languageDetection.IndexCommand}
+			def __init__(self):
+				self.spokenSequences = []
+			def speak(self, seq):
+				self.spokenSequences.append(seq)
+			def isSupported(self, setting): return True
+
+		try:
+			synthInstance = MockSynth()
+			d = driver.SynthDriver.__new__(driver.SynthDriver)
+			d._synthCache = {"fakeSynth": (synthInstance, {})}
+			d._usedSynths = []
+			d._synth = None
+			d._isSpeaking = False
+			d.speechQueue = driver.queue.Queue()
+			d._markerCounter = driver.itertools.count(100)
+			d._activeMarker = None
+			d._activeChunkId = 0
+			d._activeForwardIndices = set()
+			d._voice = "en"
+			d._activePreparedLang = None
+			d._lastPreparedLang = None
+			d._getSynth = lambda lang: synthInstance
+
+			# Typing khatma
+			d.speak([languageDetection.CharacterModeCommand(True), "۔"])
+			# Child synth receives 'ختمہ'
+			self.assertEqual(len(synthInstance.spokenSequences), 1)
+			seq = synthInstance.spokenSequences[0]
+			text = "".join(x for x in seq if isinstance(x, str))
+			self.assertEqual(text, "ختمہ")
+		finally:
+			sharedConfig.languages = oldLanguages
+			sharedConfig.defaultLang = oldDefault
+			sharedConfig.enabled = oldEnabled
 
 	def test_date_and_other_number_formatting(self):
 		sample = "Meeting on 2026-11-17 or 20/09/2026."

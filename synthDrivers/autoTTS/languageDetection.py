@@ -116,6 +116,161 @@ MATH_SYMBOLS = frozenset("+-−*/×÷=<>≤≥≈≠±√∞∑∏∫∂∆∇^�
 # Recognized Arabic-script based languages
 ARABIC_SCRIPT_LANGS = frozenset({"ur", "ar", "fa", "ps", "sd", "ug", "ckb", "ks"})
 
+# Spoken names for punctuation and symbols when typed, deleted, or spoken in character mode / isolation
+SPOKEN_SYMBOLS: Dict[str, Dict[str, str]] = {
+	"ur": {
+		"\u06d4": "ختمہ",           # Urdu full stop (۔)
+		"\u060c": "سکتہ",           # Arabic/Urdu comma (،)
+		"\u061b": "وقفہ",           # Arabic/Urdu semicolon (؛)
+		"\u061f": "سوالیہ نشان",     # Arabic/Urdu question mark (؟)
+		"\u060d": "تاریخ کا نشان",    # Date separator (؍)
+		"\u060e": "شاعر کا نشان",     # Poetic sign (؎)
+		"\u060f": "مصرع کا نشان",     # Verse sign (؏)
+		"\u0610": "صلی اللہ علیہ وسلم",
+		"\u0611": "علیہ السلام",
+		"\u0612": "رحمۃ اللہ علیہ",
+		"\u0613": "رضی اللہ عنہ",
+		"\u0614": "تخلص کا نشان",
+		".": "ختمہ",
+		",": "کوما",
+		"?": "سوالیہ نشان",
+		"!": "استعجابیہ نشان",
+		":": "کولن",
+		"-": "ڈیش",
+	},
+	"pa-pk": {
+		"\u06d4": "ختمہ",
+		"\u060c": "سکتہ",
+		"\u061b": "وقفہ",
+		"\u061f": "سوالیہ نشان",
+		".": "ختمہ",
+		",": "کوما",
+		"?": "سوالیہ نشان",
+	},
+	"pnb": {
+		"\u06d4": "ختمہ",
+		"\u060c": "سکتہ",
+		"\u061b": "وقفہ",
+		"\u061f": "سوالیہ نشان",
+		".": "ختمہ",
+		",": "کوما",
+		"?": "سوالیہ نشان",
+	},
+	"ar": {
+		"\u060c": "فاصلة",           # Arabic comma (،)
+		"\u061b": "فاصلة منقوطة",    # Arabic semicolon (؛)
+		"\u061f": "علامة استفهام",    # Arabic question mark (؟)
+		"\u06d4": "نقطة",            # Full stop (۔)
+		".": "نقطة",
+		",": "فاصلة",
+		"?": "علامة استفهام",
+		"!": "علامة تعجب",
+		":": "نقطتان",
+	},
+	"fa": {
+		"\u060c": "ویرگول",
+		"\u061b": "نقطه ویرگول",
+		"\u061f": "علامت سوال",
+		"\u06d4": "نقطه",
+		".": "نقطه",
+	},
+	"ps": {
+		"\u06d4": "ټکی",
+		"\u060c": "کامې",
+		"\u061f": "پوښتنې نښه",
+		".": "ټکی",
+	},
+	"sd": {
+		"\u06d4": "ختمو",
+		"\u060c": "اُبتو ڪاما",
+		"\u061f": "سوالي نشان",
+		".": "ختمو",
+	},
+	"hi": {
+		"\u0964": "पूर्ण विराम",      # Danda (।)
+		"\u0965": "दीर्घ विराम",      # Double Danda (॥)
+		".": "पूर्ण विराम",
+		",": "अल्पविराम",
+		"?": "प्रश्नवाचक चिह्न",
+		"!": "विस्मयादिबोधक चिह्न",
+		":": "उपविराम",
+	},
+	"pa": {
+		"\u0964": "ਡੰਡੀ",           # Dandi (।)
+		"\u0965": "ਦੋ ਡੰਡੀਆਂ",       # Double Dandi (॥)
+		".": "ਡੰਡੀ",
+		",": "ਕਾਮਾ",
+		"?": "ਪ੍ਰਸ਼ਨ ਚਿੰਨ੍ਹ",
+	},
+	"pa-in": {
+		"\u0964": "ਡੰਡੀ",
+		"\u0965": "ਦੋ ਡੰਡੀਆਂ",
+		".": "ਡੰਡੀ",
+		",": "ਕਾਮਾ",
+		"?": "ਪ੍ਰਸ਼ਨ ਚਿੰਨ੍ਹ",
+	},
+}
+
+
+def get_spoken_symbol(char: str, lang: str) -> Optional[str]:
+	"""Return the spoken name for an isolated punctuation/symbol character in the target language."""
+	if not char or not lang:
+		return None
+	normFull, baseLang = normalize_language_code(lang)
+	lang_dict = SPOKEN_SYMBOLS.get(lang) or SPOKEN_SYMBOLS.get(normFull) or SPOKEN_SYMBOLS.get(baseLang)
+	if lang_dict and char in lang_dict:
+		return lang_dict[char]
+
+	try:
+		import characterProcessing
+		desc = characterProcessing.processSpeechSymbol(lang, char)
+		if desc and desc != char:
+			return desc
+		desc = characterProcessing.getCharacterName(lang, char)
+		if desc and desc != char:
+			return desc
+	except Exception:
+		pass
+
+	return None
+
+
+def expand_spoken_symbols(text: str, lang: str, characterMode: bool = False) -> str:
+	"""Expand isolated symbols or punctuation to their spoken language-specific names."""
+	if not text:
+		return text
+	stripped = text.strip()
+	if not stripped:
+		return text
+
+	has_content = any(unicodedata.category(c).startswith(("L", "N")) for c in stripped)
+	if has_content and not characterMode:
+		return text
+
+	is_only_symbols = all(unicodedata.category(c).startswith(("P", "S")) or c.isspace() for c in text)
+	if not (characterMode or is_only_symbols):
+		return text
+
+	if len(stripped) == 1:
+		spoken = get_spoken_symbol(stripped, lang)
+		if spoken:
+			return spoken
+		return text
+
+	parts = []
+	replaced_any = False
+	for ch in text:
+		if ch.isspace():
+			parts.append(ch)
+			continue
+		spoken = get_spoken_symbol(ch, lang)
+		if spoken:
+			parts.append(spoken)
+			replaced_any = True
+		else:
+			parts.append(ch)
+	return " ".join(parts) if replaced_any else text
+
 # ISO 639-3 to 639-1 mappings
 ISO_639_3_TO_2: Dict[str, str] = {
 	"eng": "en", "urd": "ur", "ara": "ar", "hin": "hi", "fas": "fa",
