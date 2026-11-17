@@ -271,7 +271,6 @@ MOBILE_PATTERNS: List[Tuple[str, str]] = [
 	("none", _("Default (Use synthesizer reading)")),
 	("spaces", _("Spaced digits (e.g. 0 3 0 0)")),
 	("grouped", _("Grouped digits (e.g. 0300 1234567)")),
-	("words", _("Spoken words")),
 ]
 
 DATE_MODES: List[Tuple[str, str]] = [
