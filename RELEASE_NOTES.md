@@ -11,6 +11,8 @@ Version 1.2.0 fixes how Auto TTS reads Urdu symbols and honorific signs, and fix
 - **Correct voice after Urdu**: Urdu that follows Urdu is no longer sometimes read with the default voice.
 - **Lighter settings panel**: it no longer starts a second copy of a synthesizer that is already speaking. Reset All now resets everything.
 - **NVDA symbol dictionary**: Urdu and Punjabi symbol names are registered with NVDA (NVDA 2024.4 or newer) and NVDA uses the correct regional symbol tables for profiles such as `ur-PK`.
+- **No more announced full stops**: `۔` and Arabic punctuation are no longer read out in the middle of Urdu sentences, and `؟` is read in Urdu when you move onto it.
+- **Mis-tagged pages**: text tagged with a language you have no profile for is detected from the text, so dates no longer get foreign dash names.
 - **Smoother speech with logging on**: the activity log is written in the background.
 
 See the changelog for the full list.

@@ -18,8 +18,12 @@
 - Rewrote Arabic-script detection. A sentence is judged as a whole, so Arabic sentences and the Basmala are no longer partly read as Urdu, and a quoted Arabic phrase inside Urdu still gets the Arabic voice. Persian, Pashto and Sindhi profiles are now used: before, letters these languages share with Urdu sent all of them to Urdu. Urdu typed on an Arabic keyboard stays Urdu.
 - Fixed sentence and line mode reading an Urdu sentence with two English words in English: languages are now counted by words, not letters.
 - Fixed Auto TTS telling NVDA that speech had finished while more of the utterance was still queued.
+- Fixed the Urdu full stop `۔` and the Punjabi danda being announced at the end of every sentence on pages tagged Urdu or Punjabi.
+- Fixed `،` `؛` and `؟` being read out by name in English in the middle of Urdu text, and moving onto `؟` giving an English name: Auto TTS now reads them itself, in Urdu.
+- Fixed dates on pages tagged with a language that has no profile (such as Korean) reading the dash as that language's word for dash. Such tags are now ignored and the language is detected from the text.
+- Text in a language without a profile is now read with the default profile's rate, pitch and volume.
 - Fixed a possible freeze with SAPI5 voices and timers created on a synthesizer's audio thread: completion reports are now handled on NVDA's main thread.
-- Relative pitch, rate and volume changes (such as the higher pitch for capitals) are measured against the voice that speaks, without changing NVDA's own speech classes.
+- Relative pitch, rate and volume changes, such as the higher pitch for capital letters, are measured against the voice that speaks. The commands stay NVDA's own, which eSpeak, SAPI5 and Eloquence require.
 - Rate, pitch and volume changes from the settings ring are saved once after you stop changing them, not on every key press.
 - Every configured synthesizer and the shared-script language models are now started shortly after NVDA starts, so the first switch to another voice does not wait for them.
 - The language lock is now also in NVDA's synthesizer settings ring and Voice settings.

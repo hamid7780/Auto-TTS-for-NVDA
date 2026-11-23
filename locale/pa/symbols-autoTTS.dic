@@ -4,6 +4,6 @@ complexSymbols:
 
 symbols:
 # identifier	replacement[[	level][	preserve]][	# display name]
-।	ਡੰਡੀ	some	always	# Danda
-॥	ਦੋ ਡੰਡੀਆਂ	some	always	# Double danda
+।	ਡੰਡੀ	all	always	# Danda
+॥	ਦੋ ਡੰਡੀਆਂ	all	always	# Double danda
 ☬	ਖੰਡਾ	none	# Khanda

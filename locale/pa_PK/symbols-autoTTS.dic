@@ -4,7 +4,7 @@ complexSymbols:
 
 symbols:
 # identifier	replacement[[	level][	preserve]][	# display name]
-۔	ختمہ	some	always	# Urdu full stop
+۔	ختمہ	all	always	# Urdu full stop (ends a sentence, so read only at symbol level all)
 ،	سکتہ	all	always	# Arabic comma
 ؛	وقفہ	most	always	# Arabic semicolon
 ؟	سوالیہ نشان	all	always	# Arabic question mark

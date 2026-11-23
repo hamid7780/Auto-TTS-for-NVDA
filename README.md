@@ -89,13 +89,15 @@ Detection works in three steps.
 2. **Arabic script.** Urdu, Arabic, Persian, Pashto and Sindhi share one script. Auto TTS looks at the whole sentence for letters only one of them uses, such as ے and ڑ for Urdu, ة for Arabic, ځ for Pashto or ڪ for Sindhi, plus Quranic marks and tashkeel. When no letter settles it, the FastText model decides. Inside an Urdu sentence, a quoted Arabic phrase such as بسم الله الرحمن الرحيم gets the Arabic voice, while a single borrowed word stays with the sentence. Urdu typed on an Arabic keyboard (ي and ك) is still read as Urdu.
 3. **Languages that share a script.** For text in the same script, such as English, French and German, a small offline FastText model picks the language. Regional shared scripts like Perso-Arabic (Urdu, Arabic, Persian), Devanagari (Hindi, Marathi, Nepali), and Bengali/Assamese use character heuristics and dedicated n-gram language models.
 
-Text in a language that has no enabled profile is read with the default voice.
+Text in a language that has no enabled profile is read with the default voice, at its rate, pitch and volume.
+
+When a web page or application tags text with a language you have no profile for, Auto TTS ignores the tag and detects the language from the text. NVDA would otherwise name symbols in the tagged language: on a page tagged Korean, the dash in a date was read as the Korean word for dash.
 
 NVDA's own words, such as "link", "button" or "checked", are never given to the FastText model, so a role or state name is not read with a voice for another language.
 
 ### Symbols and honorific signs
 
-Punctuation inside a sentence stays with the words around it and is never read aloud by name. When a line, or a character you move to or type, holds only symbols, Auto TTS reads each symbol by name in the language of its script: a line with only `؟` is read as "سوالیہ نشان" with your Urdu voice, even when your default language is English.
+Punctuation inside a sentence stays with the words around it and is never read aloud by name, including the Urdu full stop `۔` and the Arabic comma and question mark, which NVDA's own English tables used to read out in the middle of Urdu text. When a line, or a character you move to or type, holds only symbols, Auto TTS reads each symbol by name in the language of its script: a line with only `؟` is read as "سوالیہ نشان" with your Urdu voice, even when your default language is English.
 
 Arabic-script honorific signs and word ligatures, such as `ؑ` (علیہ السلام), `ؓ` (رضی اللہ عنہ) and `ﷺ` (صلی اللہ علیہ وسلم), stand for whole words, so they are always read as those words with every synthesizer, alone or inside a sentence. Urdu and Shahmukhi Punjabi profiles use the Urdu spelling; other Arabic-script languages use the Arabic spelling.
 

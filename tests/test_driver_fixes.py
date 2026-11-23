@@ -71,17 +71,30 @@ class ProsodyTests(unittest.TestCase):
 		class Child:
 			pitch = 30
 
-		original = Pitch()
-		bound = driver._bindProsodyToChild(original, Child())
-		self.assertIsInstance(bound, Pitch)
-		self.assertEqual(bound.defaultValue, 30)
-		# NVDA's own class and the original command are left alone.
-		self.assertEqual(original.defaultValue, 50)
+		d = bareDriver()
+		d._synth = Child()
+		driver._installProsodyRouting()
+		try:
+			command = Pitch()
+			with mock.patch.object(driver.synthDriverHandler, "getSynth", return_value=d):
+				# Synths such as eSpeak and Eloquence look the command up by its exact class.
+				self.assertIs(type(command), Pitch)
+				self.assertEqual(command.defaultValue, 30)
+			with mock.patch.object(driver.synthDriverHandler, "getSynth", return_value=None):
+				self.assertEqual(command.defaultValue, 50)
+		finally:
+			driver._uninstallProsodyRouting()
 		self.assertEqual(Pitch().defaultValue, 50)
 
-	def test_other_commands_pass_through(self):
-		index = ld.IndexCommand(3)
-		self.assertIs(driver._bindProsodyToChild(index, object()), index)
+	def test_routing_is_installed_only_once(self):
+		driver._installProsodyRouting()
+		first = driver.BaseProsodyCommand.defaultValue
+		driver._installProsodyRouting()
+		try:
+			self.assertIs(driver.BaseProsodyCommand.defaultValue, first)
+		finally:
+			driver._uninstallProsodyRouting()
+		self.assertIsNone(getattr(driver.BaseProsodyCommand.defaultValue.fget, "_autoTTSOriginal", None))
 
 
 class LanguageLockSettingTests(unittest.TestCase):

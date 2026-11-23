@@ -151,7 +151,7 @@ class SymbolDictionaryTests(unittest.TestCase):
 	def test_manifest_declares_the_dictionary_and_every_file_exists(self):
 		manifest = (ROOT / "manifest.ini").read_text(encoding="utf-8")
 		self.assertRegex(manifest, r"\[symbolDictionaries\]\s*\n\s*\[\[autoTTS\]\]")
-		for locale in ("ur", "pnb", "pa_PK", "pa"):
+		for locale in ("ur", "pnb", "pa_PK", "pa", "en"):
 			self.assertTrue((ROOT / "locale" / locale / "symbols-autoTTS.dic").is_file(), locale)
 		self.assertEqual(list(ROOT.glob("locale/*/symbols.dic")), [])
 
@@ -164,6 +164,20 @@ class SymbolDictionaryTests(unittest.TestCase):
 					# Honorific signs are words: NVDA must read them at every symbol level.
 					self.assertEqual(level, "none", (locale, symbol))
 
+	def test_sentence_ending_marks_are_never_read_inside_text(self):
+		# Read at symbol level "some", the Urdu full stop and the danda were announced at the
+		# end of every sentence on pages tagged Urdu or Punjabi.
+		for path in ROOT.glob("locale/*/symbols-autoTTS.dic"):
+			entries = self.readDictionary(path)
+			for mark in ("۔", "،", "؟", "।", "॥"):
+				if mark in entries:
+					self.assertEqual(entries[mark][1], "all", (path, mark))
+
+	def test_english_speech_leaves_arabic_punctuation_to_auto_tts(self):
+		entries = self.readDictionary(ROOT / "locale" / "en" / "symbols-autoTTS.dic")
+		for mark in ("،", "؛", "؟", "۔"):
+			self.assertEqual(entries[mark][0], mark)
+
 	def test_dictionary_lines_are_well_formed(self):
 		for path in ROOT.glob("locale/*/symbols-autoTTS.dic"):
 			for symbol, (replacement, level) in self.readDictionary(path).items():
@@ -174,3 +188,26 @@ class SymbolDictionaryTests(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class LanguageTagFilterTests(unittest.TestCase):
+	def test_tags_for_languages_without_a_profile_are_dropped(self):
+		from unittest import mock
+		import globalPlugins.autoTTS as plugin
+
+		saved = (sharedConfig.languages, sharedConfig.defaultLang, sharedConfig.tagMode, sharedConfig.lockedLanguage)
+		sharedConfig.languages = {"en": LanguageVoiceConfig("en"), "ur-pk": LanguageVoiceConfig("ur-pk")}
+		sharedConfig.defaultLang = "en"
+		sharedConfig.tagMode = "override"
+		sharedConfig.lockedLanguage = None
+		active = type("Active", (), {"name": "autoTTS"})()
+		gp = plugin.GlobalPlugin.__new__(plugin.GlobalPlugin)
+		try:
+			with mock.patch.object(plugin.synthDriverHandler, "getSynth", return_value=active, create=True):
+				out = gp._filterLanguageTags([ld.LangChangeCommand("ko"), "2026-08-05", ld.LangChangeCommand("ur_PK"), "اردو"])
+				self.assertEqual([getattr(x, "lang", x) for x in out], [None, "2026-08-05", "ur_PK", "اردو"])
+				sharedConfig.tagMode = "preferTags"
+				out = gp._filterLanguageTags([ld.LangChangeCommand("ko"), "x"])
+				self.assertEqual(out[0].lang, "ko")
+		finally:
+			sharedConfig.languages, sharedConfig.defaultLang, sharedConfig.tagMode, sharedConfig.lockedLanguage = saved

@@ -462,6 +462,13 @@ class AutoTTSConfig:
 				return configuredCode
 		return normFull
 
+	def hasProfileFor(self, langCode: Optional[str]) -> bool:
+		"""Whether an enabled profile reads this language or dialect tag."""
+		if not langCode:
+			return False
+		profile = self.languages.get(self.resolveLanguageCode(normalize_language_code(langCode)[0]))
+		return profile is not None and profile.enabled
+
 	def getLanguageConfig(self, langCode: str) -> LanguageVoiceConfig:
 		"""
 		Gets config for a language or dialect tag.
@@ -492,7 +499,11 @@ class AutoTTSConfig:
 		if baseLang == defBase and self.defaultLang in self.languages:
 			return dataclasses.replace(self.languages[self.defaultLang], lang=langCode)
 
-		# 5. Return a temporary default config without storing it
+		# 5. A language without a profile is read like the default profile: same synthesizer,
+		# voice, rate, pitch and volume. The language itself is still passed on, so a synth that
+		# speaks it (Eloquence and eSpeak both read Korean) can use its own voice for it.
+		if self.defaultLang in self.languages:
+			return dataclasses.replace(self.languages[self.defaultLang], lang=langCode, enabled=True)
 		return LanguageVoiceConfig(lang=langCode)
 
 	def setLanguageConfig(self, langConfig: LanguageVoiceConfig, saveLater: bool = False):

@@ -1,0 +1,15 @@
+# Auto TTS for NVDA: Arabic-script punctuation in English speech
+# Registered through [symbolDictionaries] in manifest.ini.
+# NVDA's English Unicode table names these marks ("arabic comma") at level none, so they
+# were read aloud in English in the middle of Urdu text, and moving onto one gave an English
+# name. Each mark is mapped to itself at the level of its English counterpart: inside a
+# sentence it stays an unspoken pause, and on its own it reaches Auto TTS unchanged, which
+# reads it by name in the language of its script.
+complexSymbols:
+
+symbols:
+# identifier	replacement[[	level][	preserve]][	# display name]
+،	،	all	always	# Arabic comma
+؛	؛	most	always	# Arabic semicolon
+؟	؟	all	always	# Arabic question mark
+۔	۔	all	always	# Urdu full stop

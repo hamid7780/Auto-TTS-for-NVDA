@@ -1,7 +1,6 @@
 # Auto TTS for NVDA - Core Synthesizer Driver
 # Covered by GNU General Public License (GPL)
 
-import copy
 import queue
 import importlib
 import itertools
@@ -210,42 +209,46 @@ def _logIfSlow(what, startedAt, detail=""):
 			pass
 
 
-_boundProsodyTypes: Dict[type, type] = {}
-
-
-def _bindProsodyToChild(item, child):
-	"""A copy of a pitch, rate or volume command that measures itself against `child`.
-	NVDA computes such a command (a capital letter's higher pitch, say) from the active
-	synthesizer's value, which for Auto TTS is the settings-ring profile, not the voice
-	speaking this chunk. Copying the command keeps NVDA's own class untouched."""
-	if child is None or not isinstance(item, BaseProsodyCommand):
-		return item
-	base = type(item)
-	bound = _boundProsodyTypes.get(base)
-	if bound is None:
-		original = getattr(base, "defaultValue", None)
-		if not isinstance(original, property):
-			return item
-
-		def defaultValue(cmd, _original=original):
-			owner = cmd.__dict__.get("_autoTTSChild")
-			name = getattr(cmd, "settingName", None)
-			if owner is not None and name:
-				try:
-					return getattr(owner, name)
-				except Exception:
-					pass
-			return _original.fget(cmd)
-
-		bound = type(base.__name__, (base,), {"defaultValue": property(defaultValue)})
-		_boundProsodyTypes[base] = bound
+def _activeAutoTTS():
+	"""The Auto TTS driver NVDA is speaking with, or None."""
 	try:
-		clone = copy.copy(item)
-		clone.__class__ = bound
-		clone._autoTTSChild = child
-		return clone
+		synth = synthDriverHandler.getSynth()
 	except Exception:
-		return item
+		return None
+	return synth if isinstance(synth, SynthDriver) else None
+
+
+def _installProsodyRouting():
+	"""Make relative pitch, rate and volume commands (a capital letter's higher pitch) measure
+	themselves against the child voice that speaks them, not against Auto TTS's own settings.
+
+	The commands must stay NVDA's own objects: eSpeak, SAPI5 and Eloquence recognise them by
+	their exact class (type(item)), so a copy or subclass is silently ignored. Only how their
+	base value is looked up changes, and only while Auto TTS is the active synthesizer;
+	otherwise NVDA's original lookup runs. Installed once, however many drivers exist."""
+	current = BaseProsodyCommand.defaultValue
+	if getattr(getattr(current, "fget", None), "_autoTTSOriginal", None) is not None:
+		return
+
+	def defaultValue(cmd, _original=current):
+		auto = _activeAutoTTS()
+		child = auto._synth if auto is not None else None
+		name = getattr(cmd, "settingName", None)
+		if child is not None and name:
+			try:
+				return getattr(child, name)
+			except Exception:
+				pass
+		return _original.fget(cmd)
+
+	defaultValue._autoTTSOriginal = current
+	BaseProsodyCommand.defaultValue = property(defaultValue)
+
+
+def _uninstallProsodyRouting():
+	original = getattr(getattr(BaseProsodyCommand.defaultValue, "fget", None), "_autoTTSOriginal", None)
+	if original is not None:
+		BaseProsodyCommand.defaultValue = original
 
 
 def _nvdaVocabulary() -> frozenset:
@@ -301,6 +304,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 		self._activeChunkId = 0
 		self._activeForwardIndices = set()
 		self._everActive = False
+		_installProsodyRouting()
 
 		# Initialize default language
 		try:
@@ -329,6 +333,10 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 			synthDoneSpeaking.unregister(self._onSynthDoneSpeaking)
 		except Exception:
 			pass
+		# A temporary instance (NVDA's settings dialogs make some) must not remove the routing
+		# the active one relies on.
+		if _activeAutoTTS() is self:
+			_uninstallProsodyRouting()
 
 		try:
 			self.cancel()
@@ -689,9 +697,7 @@ class SynthDriver(synthDriverHandler.SynthDriver):
 					insertAt -= 1
 				sequence.insert(insertAt, IndexCommand(marker))
 
-			child = self._synth
-			sequence = [_bindProsodyToChild(item, child) for item in sequence]
-			alignedSeq = self._alignLanguageCommands(child, sequence)
+			alignedSeq = self._alignLanguageCommands(self._synth, sequence)
 			if activityLog.isEnabled():
 				# Formatting reads every prosody property of the child synth; only pay for it when logging.
 				activityLog.write(

@@ -55,6 +55,7 @@ except ImportError:
 from .settingsPanel import AutoTTSSettingsPanel, _getLangName
 from synthDrivers.autoTTS.configManager import sharedConfig
 from synthDrivers.autoTTS import activityLog
+from synthDrivers.autoTTS.languageDetection import LangChangeCommand
 
 
 class LanguageLockDialog(wx.SingleChoiceDialog):
@@ -120,6 +121,15 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			except Exception:
 				pass
 
+		# Language tags for languages without a profile are dropped before NVDA names symbols.
+		self._speechFilter = None
+		try:
+			from speech.extensions import filter_speechSequence
+			filter_speechSequence.register(self._filterLanguageTags)
+			self._speechFilter = filter_speechSequence
+		except Exception:
+			pass
+
 		# First run onboarding prompt
 		if getattr(sharedConfig, "firstRun", False):
 			sharedConfig.firstRun = False
@@ -156,6 +166,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			speech.extensions.pre_speech.unregister(self._onPreSpeech)
 		except Exception:
 			pass
+		if self._speechFilter is not None:
+			try:
+				self._speechFilter.unregister(self._filterLanguageTags)
+			except Exception:
+				pass
 		super().terminate()
 
 	def _onMenuSettings(self, event):
@@ -174,6 +189,33 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			)
 		except Exception:
 			pass
+
+	def _filterLanguageTags(self, speechSequence, *args, **kwargs):
+		"""Treat text tagged with a language that has no Auto TTS profile as untagged.
+
+		NVDA replaces symbols with names in the tagged language before any synthesizer sees the
+		text. A Samsung page tagged Korean had the dash of every date turned into the Korean word
+		대시, which Auto TTS then rightly read with a Korean voice. Auto TTS finds the language of
+		such text itself (the "Detect from text" tag setting), so without a profile for the tagged
+		language the tag is replaced by the default language, whose symbol names the voice reads."""
+		try:
+			synth = synthDriverHandler.getSynth()
+			if (
+				getattr(synth, "name", "") != "autoTTS"
+				or not sharedConfig.enabled
+				or sharedConfig.lockedLanguage
+				or sharedConfig.tagMode != "override"
+			):
+				return speechSequence
+			changed = None
+			for position, item in enumerate(speechSequence):
+				if isinstance(item, LangChangeCommand) and item.lang and not sharedConfig.hasProfileFor(item.lang):
+					if changed is None:
+						changed = list(speechSequence)
+					changed[position] = LangChangeCommand(None)
+			return speechSequence if changed is None else changed
+		except Exception:
+			return speechSequence
 
 	def _prewarmActiveAutoTTS(self):
 		try:
