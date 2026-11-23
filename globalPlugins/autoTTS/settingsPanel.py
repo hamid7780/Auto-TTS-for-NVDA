@@ -115,13 +115,6 @@ from synthDrivers.autoTTS.languageDetection import (
 from synthDrivers.autoTTS import voiceMatch, voiceLabels, activityLog
 
 
-def _getSynthInstance(name: str):
-	import importlib
-	if not name:
-		name = "espeak"
-	return importlib.import_module(f"synthDrivers.{name}", package="synthDrivers").SynthDriver()
-
-
 # World languages sorted alphabetically by display name
 BASE_WORLD_LANGUAGES: List[Tuple[str, str]] = sorted([
 	("af", "Afrikaans"),
@@ -292,13 +285,6 @@ LARGE_NUMBER_SYSTEMS: List[Tuple[str, str]] = [
 	("indian", _("Indian numbering system (Lakh, Crore)")),
 ]
 
-LONG_NUMBER_MODES: List[Tuple[str, str]] = [
-	("digits", _("Individual digits")),
-	("grouped", _("Grouped in clusters of 3 digits")),
-	("crore_lakh", _("Indian numbering (Crore & Lakh)")),
-	("natural", _("Standard natural numbers")),
-]
-
 
 def _safeInt(val: Any, default: int = 50) -> int:
 	try:
@@ -348,12 +334,39 @@ def _getAvailableProfiles() -> List[Tuple[str, str]]:
 	return profiles
 
 
+def _activeSynth():
+	"""NVDA's current synthesizer (synthDriverHandler has no public 'synth' attribute)."""
+	try:
+		return synthDriverHandler.getSynth()
+	except Exception:
+		return None
+
+
+# Synth instances the settings dialogs created themselves (the active synth and Auto TTS's
+# own children are reused instead). They are terminated when the panel closes: an engine
+# such as SAPI5 or OneCore keeps native resources alive until terminate() is called.
+_enumSynths: Dict[str, Any] = {}
+
+
+def _releaseEnumSynths():
+	for synth in list(_enumSynths.values()):
+		if synth is _activeSynth():
+			continue
+		try:
+			synth.cancel()
+			synth.terminate()
+		except Exception:
+			pass
+	_enumSynths.clear()
+
+
 def _getSynthInstanceForEnum(synthId: str):
-	"""Returns a synth instance to read availableVoices / availableVariants / settings,
-	reusing live instances when possible, safely creating one without breaking process-wide engines."""
+	"""Returns a synth instance to read availableVoices / availableVariants / settings.
+	The active synth and Auto TTS's own child synths are reused, so the panel never runs a
+	second copy of an engine that is already speaking."""
 	if not synthId:
 		synthId = "espeak"
-	activeSynth = getattr(synthDriverHandler, "synth", None)
+	activeSynth = _activeSynth()
 	if activeSynth is not None:
 		if getattr(activeSynth, "name", "") == synthId:
 			return activeSynth
@@ -365,31 +378,17 @@ def _getSynthInstanceForEnum(synthId: str):
 				if inst is not None:
 					return inst
 
-	if not hasattr(_getSynthInstanceForEnum, "_cache"):
-		_getSynthInstanceForEnum._cache = {}
-	if synthId in _getSynthInstanceForEnum._cache:
-		return _getSynthInstanceForEnum._cache[synthId]
-
-	inst = None
+	if synthId in _enumSynths:
+		return _enumSynths[synthId]
 	try:
 		inst = synthDriverHandler.getSynthInstance(synthId)
 	except Exception:
-		try:
-			inst = _getSynthInstance(synthId)
-		except Exception:
-			inst = None
-
-	if inst is not None:
-		_getSynthInstanceForEnum._cache[synthId] = inst
+		return None
+	_enumSynths[synthId] = inst
 	return inst
 
 
-def _getPreviewSynth(synthId: str):
-	return _getSynthInstanceForEnum(synthId)
-
-
-def _ensurePreviewSynth(synthId: str):
-	return _getSynthInstanceForEnum(synthId)
+_getPreviewSynth = _getSynthInstanceForEnum
 
 
 def _saveSynthState(synthId: str) -> Dict[str, Any]:
@@ -598,6 +597,7 @@ class ProfileEditorDialog(wx.Dialog):
 		self._languageOptions = _buildLanguageCatalog()
 		self.currentVoices: List[Tuple[str, str]] = [("", _("Default Voice"))]
 		self.result: Optional[LanguageVoiceConfig] = None
+		self._previewPlayed = False
 
 		self._originalSynthStates: Dict[str, Dict[str, Any]] = {}
 		self._targetVoiceId: Optional[str] = langConfig.voice if (isEdit and langConfig) else None
@@ -641,7 +641,8 @@ class ProfileEditorDialog(wx.Dialog):
 		)
 		self.langChoice.SetSelection(0)
 		self.langChoice.Bind(wx.EVT_CHOICE, self._onLangChanged)
-		self.langChoice.Bind(wx.EVT_TEXT, self._onLangChanged)
+		self.langChoice.Bind(wx.EVT_COMBOBOX, self._onLangChanged)
+		self.langChoice.Bind(wx.EVT_KILL_FOCUS, self._onLangKillFocus)
 		mainSizer.Add(self.langChoice, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, pad)
 
 		# TTS Engine
@@ -862,14 +863,13 @@ class ProfileEditorDialog(wx.Dialog):
 
 		if self.voiceChoice.GetCount() > 0:
 			self.voiceChoice.SetSelection(vIdx)
-
-		self._applyVoiceToPreviewSynth()
+		self._lastLoadedLangCode = langCode
 
 	def _applyVoiceToPreviewSynth(self):
 		synthId = self._getSelectedSynthId()
 		voiceIdx = self.voiceChoice.GetSelection()
 		voiceId = self.currentVoices[voiceIdx][0] if 0 <= voiceIdx < len(self.currentVoices) else ""
-		synth = _ensurePreviewSynth(synthId)
+		synth = _getPreviewSynth(synthId)
 		if synth and hasattr(synth, "voice"):
 			try:
 				if voiceId and voiceId in getattr(synth, "availableVoices", {}):
@@ -879,7 +879,7 @@ class ProfileEditorDialog(wx.Dialog):
 
 	def _applyProsodyToPreviewSynth(self):
 		synthId = self._getSelectedSynthId()
-		synth = _ensurePreviewSynth(synthId)
+		synth = _getPreviewSynth(synthId)
 		if synth:
 			try:
 				if hasattr(synth, "rate"):
@@ -908,7 +908,19 @@ class ProfileEditorDialog(wx.Dialog):
 		self._applyVoiceToPreviewSynth()
 
 	def _onLangChanged(self, event):
-		self._loadVoicesForSelectedSynth()
+		newCode = self._getSelectedLangCode()
+		if newCode != getattr(self, "_lastLoadedLangCode", None):
+			self._loadVoicesForSelectedSynth()
+
+	def _onLangKillFocus(self, event):
+		newCode = self._getSelectedLangCode()
+		if newCode != getattr(self, "_lastLoadedLangCode", None):
+			self._loadVoicesForSelectedSynth()
+		if event:
+			try:
+				event.Skip()
+			except Exception:
+				pass
 
 	def _onProsodyCheckChanged(self, event):
 		self._updateProsodyState()
@@ -952,8 +964,8 @@ class ProfileEditorDialog(wx.Dialog):
 
 	def _speakPreviewSample(self):
 		synthId = self._getSelectedSynthId()
-		synth = _ensurePreviewSynth(synthId)
-		activeWrapper = getattr(synthDriverHandler, "synth", None)
+		synth = _getPreviewSynth(synthId)
+		activeWrapper = _activeSynth()
 		if activeWrapper and getattr(activeWrapper, "name", "") == "autoTTS" and getattr(activeWrapper, "_isSpeaking", False):
 			# A direct child preview must first invalidate the wrapper's queue and
 			# marker; otherwise its completion can leave normal speech stuck.
@@ -967,6 +979,7 @@ class ProfileEditorDialog(wx.Dialog):
 		if self.customProsodyCheck.GetValue():
 			self._applyProsodyToPreviewSynth()
 
+		self._previewPlayed = True
 		spoken = False
 		if synth is not None:
 			try:
@@ -1031,6 +1044,17 @@ class ProfileEditorDialog(wx.Dialog):
 			customPitch=self.pitchSlider.GetValue() if useCustomProsody else -1,
 			customVolume=self.volumeSlider.GetValue() if useCustomProsody else -1,
 		)
+		if self._previewTimer:
+			self._previewTimer.Stop()
+		if getattr(self, "_previewPlayed", False):
+			synthId = self._getSelectedSynthId()
+			synth = _getPreviewSynth(synthId)
+			if synth:
+				try:
+					synth.cancel()
+				except Exception:
+					pass
+
 		self.EndModal(wx.ID_OK)
 
 	def _onCancel(self, event=None):
@@ -1040,13 +1064,14 @@ class ProfileEditorDialog(wx.Dialog):
 		if self._previewTimer:
 			self._previewTimer.Stop()
 
-		synthId = self._getSelectedSynthId()
-		synth = _getPreviewSynth(synthId)
-		if synth:
-			try:
-				synth.cancel()
-			except Exception:
-				pass
+		if getattr(self, "_previewPlayed", False):
+			synthId = self._getSelectedSynthId()
+			synth = _getPreviewSynth(synthId)
+			if synth:
+				try:
+					synth.cancel()
+				except Exception:
+					pass
 
 		self.EndModal(wx.ID_CANCEL)
 
@@ -1069,12 +1094,10 @@ class AutoTTSSettingsPanel(SettingsPanel):
 			self.enabledCheck = sHelper.addItem(
 				wx.CheckBox(self, label=_("&Enable Automatic Language Switching"))
 			)
-			self.enabledCheck.SetValue(bool(sharedConfig.enabled))
 
 			self.unicodeCheck = sHelper.addItem(
 				wx.CheckBox(self, label=_("&Use Unicode-based language detection"))
 			)
-			self.unicodeCheck.SetValue(bool(sharedConfig.useUnicodeLanguageDetection))
 
 			self.statisticalCheck = sHelper.addItem(
 				wx.CheckBox(
@@ -1082,30 +1105,21 @@ class AutoTTSSettingsPanel(SettingsPanel):
 					label=_("Smart same-&script language detection (bundled FastText, offline)"),
 				)
 			)
-			self.statisticalCheck.SetValue(bool(sharedConfig.useStatisticalLanguageDetection))
 
 			self.smartUrduCheck = sHelper.addItem(
 				wx.CheckBox(self, label=_("Smart &Arabic/Urdu automatic separation (Quran/Tashkeel detection)"))
 			)
-			self.smartUrduCheck.SetValue(bool(sharedConfig.smartUrduArabic))
 
 			self.protectMathCheck = sHelper.addItem(
 				wx.CheckBox(self, label=_("&Protect math symbols and formulas from normal language switching"))
 			)
-			self.protectMathCheck.SetValue(bool(sharedConfig.protectMathSymbols))
 
 			self._mathLanguageModes = list(MATH_LANGUAGE_MODES)
-			for code, cfg in sharedConfig.languages.items():
-				if cfg.enabled and code not in ("current", "default"):
-					self._mathLanguageModes.append((code, _getLangName(code)))
-			mathLabels = [m[1] for m in self._mathLanguageModes]
 			self.mathLanguageChoice = sHelper.addLabeledControl(
 				_("&Math reading language:"),
 				wx.Choice,
-				choices=mathLabels,
+				choices=[m[1] for m in self._mathLanguageModes],
 			)
-			mathIdx = next((i for i, (code, desc) in enumerate(self._mathLanguageModes) if code == sharedConfig.mathLanguage), 0)
-			self.mathLanguageChoice.SetSelection(mathIdx)
 
 			tagLabels = [m[1] for m in TAG_MODES]
 			self.tagModeChoice = sHelper.addLabeledControl(
@@ -1113,8 +1127,6 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				wx.Choice,
 				choices=tagLabels,
 			)
-			tagIdx = next((i for i, (code, desc) in enumerate(TAG_MODES) if code == sharedConfig.tagMode), 0)
-			self.tagModeChoice.SetSelection(tagIdx)
 
 			# Granularity Mode
 			granularityLabels = [m[1] for m in GRANULARITY_MODES]
@@ -1123,8 +1135,6 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				wx.Choice,
 				choices=granularityLabels
 			)
-			granIdx = next((i for i, (c, mDesc) in enumerate(GRANULARITY_MODES) if c == sharedConfig.granularityMode), 0)
-			self.granularityChoice.SetSelection(granIdx)
 
 			# Number Mode
 			numberLabels = [m[1] for m in NUMBER_MODES]
@@ -1133,8 +1143,6 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				wx.Choice,
 				choices=numberLabels
 			)
-			numIdx = next((i for i, (c, modeDesc) in enumerate(NUMBER_MODES) if c == sharedConfig.numberMode), 0)
-			self.numberModeChoice.SetSelection(numIdx)
 
 			# Mobile Phone Number Pattern
 			mobileLabels = [m[1] for m in MOBILE_PATTERNS]
@@ -1143,8 +1151,6 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				wx.Choice,
 				choices=mobileLabels
 			)
-			mobIdx = next((i for i, (c, _) in enumerate(MOBILE_PATTERNS) if c == sharedConfig.mobilePattern), 0)
-			self.mobilePatternChoice.SetSelection(mobIdx)
 
 			# Date Reading Format
 			dateLabels = [m[1] for m in DATE_MODES]
@@ -1153,8 +1159,6 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				wx.Choice,
 				choices=dateLabels
 			)
-			dateIdx = next((i for i, (c, _) in enumerate(DATE_MODES) if c == getattr(sharedConfig, "dateMode", "default")), 0)
-			self.dateModeChoice.SetSelection(dateIdx)
 
 			# Other Numbers Format
 			otherNumberLabels = [m[1] for m in OTHER_NUMBER_MODES]
@@ -1163,8 +1167,6 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				wx.Choice,
 				choices=otherNumberLabels
 			)
-			otherNumIdx = next((i for i, (c, _) in enumerate(OTHER_NUMBER_MODES) if c == getattr(sharedConfig, "otherNumberMode", "default")), 0)
-			self.otherNumberModeChoice.SetSelection(otherNumIdx)
 
 			# Large Numbers Numbering System (combines Indian Lakh/Crore vs Western Million/Billion)
 			largeNumLabels = [m[1] for m in LARGE_NUMBER_SYSTEMS]
@@ -1173,19 +1175,15 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				wx.Choice,
 				choices=largeNumLabels,
 			)
-			largeNumIdx = 1 if getattr(sharedConfig, "croreLakhEnabled", True) else 0
-			self.largeNumberSystemChoice.SetSelection(largeNumIdx)
 
 			# Activity Logging & Diagnostics
 			self.loggingCheck = sHelper.addItem(
 				wx.CheckBox(self, label=_("Enable diagnostic activity &logging (Auto TTS log.txt)"))
 			)
-			self.loggingCheck.SetValue(bool(getattr(sharedConfig, "loggingEnabled", True)))
 
 			self.logIncludeTextCheck = sHelper.addItem(
 				wx.CheckBox(self, label=_("Include spoken &text in log (Privacy warning: spoken text is written to disk)"))
 			)
-			self.logIncludeTextCheck.SetValue(bool(getattr(sharedConfig, "logIncludeText", False)))
 
 			self.openLogFolderBtn = sHelper.addItem(
 				wx.Button(self, label=_("&Open Log Folder..."))
@@ -1246,15 +1244,39 @@ class AutoTTSSettingsPanel(SettingsPanel):
 
 			sHelper.addItem(backupSizer)
 
-			# Initialize profile list & button states
+			# Initialize control values, profile list & button states
 			self._profileLangCodes: List[str] = []
-			self._refreshProfileList()
+			self._loadControlValues()
 
 		except Exception as e:
 			try:
 				log.exception(f"AutoTTS: Error building settings panel: {e}")
 			except Exception:
 				pass
+
+	@staticmethod
+	def _indexOf(options, value, default=0):
+		return next((i for i, (code, _label) in enumerate(options) if code == value), default)
+
+	def _loadControlValues(self):
+		"""Show the current configuration in every control (after building, import or reset)."""
+		self._voiceListCache.clear()
+		self.enabledCheck.SetValue(bool(sharedConfig.enabled))
+		self.unicodeCheck.SetValue(bool(sharedConfig.useUnicodeLanguageDetection))
+		self.statisticalCheck.SetValue(bool(sharedConfig.useStatisticalLanguageDetection))
+		self.smartUrduCheck.SetValue(bool(sharedConfig.smartUrduArabic))
+		self.protectMathCheck.SetValue(bool(sharedConfig.protectMathSymbols))
+		self._refreshMathLanguageChoices()
+		self.tagModeChoice.SetSelection(self._indexOf(TAG_MODES, sharedConfig.tagMode))
+		self.granularityChoice.SetSelection(self._indexOf(GRANULARITY_MODES, sharedConfig.granularityMode))
+		self.numberModeChoice.SetSelection(self._indexOf(NUMBER_MODES, sharedConfig.numberMode))
+		self.mobilePatternChoice.SetSelection(self._indexOf(MOBILE_PATTERNS, sharedConfig.mobilePattern))
+		self.dateModeChoice.SetSelection(self._indexOf(DATE_MODES, sharedConfig.dateMode))
+		self.otherNumberModeChoice.SetSelection(self._indexOf(OTHER_NUMBER_MODES, sharedConfig.otherNumberMode))
+		self.largeNumberSystemChoice.SetSelection(1 if sharedConfig.croreLakhEnabled else 0)
+		self.loggingCheck.SetValue(bool(sharedConfig.loggingEnabled))
+		self.logIncludeTextCheck.SetValue(bool(sharedConfig.logIncludeText))
+		self._refreshProfileList()
 
 	def onManageExclusions(self, event):
 		try:
@@ -1276,8 +1298,7 @@ class AutoTTSSettingsPanel(SettingsPanel):
 		self.mathLanguageChoice.Clear()
 		for code, label in self._mathLanguageModes:
 			self.mathLanguageChoice.Append(label)
-		idx = next((i for i, (code, label) in enumerate(self._mathLanguageModes) if code == sharedConfig.mathLanguage), 0)
-		self.mathLanguageChoice.SetSelection(idx)
+		self.mathLanguageChoice.SetSelection(self._indexOf(self._mathLanguageModes, sharedConfig.mathLanguage))
 
 	def onExportSettings(self, event):
 		try:
@@ -1315,38 +1336,8 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				if fileDialog.ShowModal() == wx.ID_OK:
 					path = fileDialog.GetPath()
 					sharedConfig.importConfig(path)
-					self._voiceListCache.clear()
-					self._refreshProfileList()
+					self._loadControlValues()
 					self._syncActiveSynth()
-
-					# Update UI toggles
-					self.enabledCheck.SetValue(bool(sharedConfig.enabled))
-					self.unicodeCheck.SetValue(bool(sharedConfig.useUnicodeLanguageDetection))
-					self.statisticalCheck.SetValue(bool(sharedConfig.useStatisticalLanguageDetection))
-					self.smartUrduCheck.SetValue(bool(sharedConfig.smartUrduArabic))
-					self.protectMathCheck.SetValue(bool(sharedConfig.protectMathSymbols))
-					self._refreshMathLanguageChoices()
-					tagIdx = next((i for i, (code, desc) in enumerate(TAG_MODES) if code == sharedConfig.tagMode), 0)
-					self.tagModeChoice.SetSelection(tagIdx)
-
-					numIdx = next((i for i, (c, mDesc) in enumerate(NUMBER_MODES) if c == sharedConfig.numberMode), 0)
-					self.numberModeChoice.SetSelection(numIdx)
-
-					granIdx = next((i for i, (c, mDesc) in enumerate(GRANULARITY_MODES) if c == sharedConfig.granularityMode), 0)
-					self.granularityChoice.SetSelection(granIdx)
-
-					mobIdx = next((i for i, (c, _) in enumerate(MOBILE_PATTERNS) if c == sharedConfig.mobilePattern), 0)
-					self.mobilePatternChoice.SetSelection(mobIdx)
-
-					dateIdx = next((i for i, (c, _) in enumerate(DATE_MODES) if c == getattr(sharedConfig, "dateMode", "default")), 0)
-					self.dateModeChoice.SetSelection(dateIdx)
-
-					otherNumIdx = next((i for i, (c, _) in enumerate(OTHER_NUMBER_MODES) if c == getattr(sharedConfig, "otherNumberMode", "default")), 0)
-					self.otherNumberModeChoice.SetSelection(otherNumIdx)
-
-					self.largeNumberSystemChoice.SetSelection(1 if getattr(sharedConfig, "croreLakhEnabled", True) else 0)
-					self.loggingCheck.SetValue(bool(getattr(sharedConfig, "loggingEnabled", True)))
-					self.logIncludeTextCheck.SetValue(bool(getattr(sharedConfig, "logIncludeText", False)))
 
 					wx.MessageBox(
 						_("Auto TTS settings and profiles imported successfully."),
@@ -1573,55 +1564,15 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING
 			)
 			if dlg.ShowModal() == wx.ID_YES:
-				sharedConfig.languages.clear()
-				sharedConfig.scriptMapping = dict(DEFAULT_SCRIPT_MAPPINGS)
-				sharedConfig.numberMode = "current"
-				sharedConfig.granularityMode = "word"
-				sharedConfig.smartUrduArabic = True
-				sharedConfig.protectMathSymbols = True
-				sharedConfig.mathLanguage = "current"
-				sharedConfig.tagMode = "override"
-				sharedConfig.useUnicodeLanguageDetection = True
-				sharedConfig.useStatisticalLanguageDetection = True
+				sharedConfig.resetToDefaults()
 				try:
 					sharedConfig.defaultLang = get_base_language(languageHandler.getLanguage())
 				except Exception:
 					sharedConfig.defaultLang = ""
-				sharedConfig.enabled = True
-				sharedConfig.excludedApps = list(DEFAULT_EXCLUDED_APPS)
-				sharedConfig.lockedLanguage = None
 				sharedConfig.save(allowEmptyProfiles=True)
-
-				sharedConfig.mobilePattern = "none"
-				sharedConfig.dateMode = "default"
-				sharedConfig.otherNumberMode = "default"
-				sharedConfig.longNumberMode = "digits"
-				sharedConfig.longNumberMinDigits = 5
-				sharedConfig.croreLakhEnabled = False
-				sharedConfig.loggingEnabled = True
-				sharedConfig.logIncludeText = False
-				activityLog.setEnabled(True)
-				activityLog.setIncludeText(False)
-
-				self._voiceListCache.clear()
-
-				# Reload UI
-				self.enabledCheck.SetValue(True)
-				self.unicodeCheck.SetValue(True)
-				self.statisticalCheck.SetValue(True)
-				self.smartUrduCheck.SetValue(True)
-				self.protectMathCheck.SetValue(True)
-				self._refreshMathLanguageChoices()
-				self.tagModeChoice.SetSelection(0)
-				self.numberModeChoice.SetSelection(0)
-				self.mobilePatternChoice.SetSelection(0)
-				self.dateModeChoice.SetSelection(0)
-				self.otherNumberModeChoice.SetSelection(0)
-				self.largeNumberSystemChoice.SetSelection(1 if getattr(sharedConfig, "croreLakhEnabled", True) else 0)
-				self.loggingCheck.SetValue(True)
-				self.logIncludeTextCheck.SetValue(False)
-				self.granularityChoice.SetSelection(0)
-				self._refreshProfileList()
+				activityLog.setEnabled(sharedConfig.loggingEnabled)
+				activityLog.setIncludeText(sharedConfig.logIncludeText)
+				self._loadControlValues()
 				self._syncActiveSynth()
 
 				try:
@@ -1646,18 +1597,19 @@ class AutoTTSSettingsPanel(SettingsPanel):
 
 	def _syncActiveSynth(self):
 		try:
-			getSynth = getattr(synthDriverHandler, "getSynth", None)
-			activeSynth = getSynth() if callable(getSynth) else getattr(synthDriverHandler, "synth", None)
+			self._voiceListCache.clear()
+			activeSynth = _activeSynth()
 			if activeSynth and getattr(activeSynth, "name", "") == "autoTTS":
-				if hasattr(activeSynth, "loadSettings"):
-					activeSynth.loadSettings()
 				targetLang = sharedConfig.defaultLang
 				if targetLang not in sharedConfig.languages and sharedConfig.languages:
 					targetLang = next(iter(sharedConfig.languages))
-				activeSynth._voice = targetLang or getattr(activeSynth, "_voice", "en")
-				# Refresh NVDA's live ring so profile additions/removals appear without
-				# switching synthesizers or restarting NVDA.
-				synthDriverHandler.changeVoice(activeSynth, activeSynth._voice)
+				# Re-apply profiles on the next utterance so changes take effect immediately
+				activeSynth._activePreparedLang = None
+				if hasattr(activeSynth, "_rebindSettingsRing"):
+					activeSynth._rebindSettingsRing()
+				if targetLang and targetLang != getattr(activeSynth, "_voice", None):
+					activeSynth._voice = targetLang
+					synthDriverHandler.changeVoice(activeSynth, activeSynth._voice)
 		except Exception:
 			pass
 
@@ -1713,3 +1665,8 @@ class AutoTTSSettingsPanel(SettingsPanel):
 				log.exception(f"AutoTTS: Error saving settings: {e}")
 			except Exception:
 				pass
+		finally:
+			_releaseEnumSynths()
+
+	def onDiscard(self):
+		_releaseEnumSynths()

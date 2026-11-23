@@ -20,7 +20,8 @@ GROUP_FILES = {"dev": "lid_dev.json", "perso": "lid_perso.json", "beng": "lid_be
 
 GROUP_ORDER = {
 	"dev": ("hi", "mr", "ne", "bho", "mai", "kok", "sa"),
-	"perso": ("ur", "ar", "sd", "fa"),
+	# The bundled Perso-Arabic model knows only these three; Persian and Pashto are left to FastText.
+	"perso": ("ur", "ar", "sd"),
 	"beng": ("bn", "as"),
 }
 DEV_EXTRAS = ("brx", "doi", "ks")
@@ -87,7 +88,7 @@ def candidates(group: str, enabled: set) -> list:
 
 
 def preload(enabled: set):
-	"""Preloads models for enabled shared-script languages."""
+	"""Start loading the models for the script groups where two or more languages are enabled."""
 	for group in GROUP_ORDER:
 		if len(candidates(group, enabled)) >= 2:
 			_ensure(group)
@@ -133,6 +134,26 @@ def _decide(group: str, model, cands: list, text: str, previous: str):
 	return default, f"ngram: margin={margin:.2f} < tau={tau:.2f} -> {default}", True, words, scores
 
 
+def model_decision(text: str, script_name: str, enabled: set) -> "str | None":
+	"""The n-gram model's confident choice among the enabled languages, or None while the
+	model is loading, when it is unsure, or when fewer than two candidates are enabled."""
+	group = {"Devanagari": "dev", "Arabic": "perso", "Bengali": "beng"}.get(script_name)
+	cands = candidates(group, enabled) if group else []
+	if len(cands) < 2:
+		return None
+	model = _ensure(group)
+	if model is None:
+		return None
+	try:
+		cands = [c for c in cands if c in model.langs]
+		if len(cands) < 2:
+			return None
+		best, _reason, fellBack, _words, _scores = _decide(group, model, cands, text, cands[0])
+		return None if fellBack else best
+	except Exception:
+		return None
+
+
 def resolve_segment(text: str, script_name: str, enabled: set) -> str:
 	"""
 	Quick entry point for deciding a single segment or sentence of shared script.
@@ -150,12 +171,6 @@ def resolve_segment(text: str, script_name: str, enabled: set) -> str:
 	# Special fast heuristics
 	if group == "beng" and "as" in cands and any(c in text for c in "ৰৱ"):
 		return "as"
-	if group == "perso":
-		from . import persoArabicLid
-		res = persoArabicLid.classify(text)
-		if res and res in cands:
-			return res
-
 	model = _ensure(group)
 	if model is not None:
 		try:

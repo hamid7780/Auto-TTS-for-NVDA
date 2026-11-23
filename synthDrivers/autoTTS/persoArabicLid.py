@@ -1,130 +1,178 @@
-# Auto TTS for NVDA - Perso-Arabic Language Disambiguation (Urdu vs Arabic)
+# Auto TTS for NVDA - Arabic-script language identification
+# (Urdu, Arabic, Persian, Pashto, Sindhi; Shahmukhi Punjabi reads as Urdu)
 # Covered by GNU General Public License (GPL)
+"""Decide which Arabic-script language a word or clause is written in.
+
+Each word is scored from letters that only some of these languages use. A clause takes
+the language its words agree on; a statistical model is asked only when no word carries
+a letter that settles it. Inside a clause, a run of words is given another language only
+on real evidence (one decisive word, or two weaker ones), so a single borrowed word never
+splits a sentence, while a quoted Arabic phrase inside Urdu still gets the Arabic voice.
+"""
 
 import re
+from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
-# Urdu and Persian-exclusive letter forms that never appear in standard Arabic
-URDU_CHARS = frozenset("کیہےھٹڈڑں۔گچپژٻڀٺٽڇڌڍڎڙڦګڳڱڻݨ")
+# Decisive letters. Each set holds letters normal text in the other languages never uses.
+URDU_LETTERS = frozenset("ٹڈڑںھہۂۃےۓ")  # ٹ ڈ ڑ ں ھ ہ ۂ ۃ ے ۓ
+PASHTO_LETTERS = frozenset("ټځڅډړږښګڼۍې")  # ټ ځ څ ډ ړ ږ ښ ګ ڼ ۍ ې
+# Sindhi-only letters. ٻ ڄ ڳ ڻ are left out: Saraiki and Shahmukhi Punjabi use them too.
+SINDHI_LETTERS = frozenset("ٺٽٿڀڃڇڊڌڍڏڙڦڪڱ")
+ARABIC_LETTERS = frozenset("ةىإ")  # ة ى إ
 
-# Arabic-exclusive letter forms and Tashkeel marks
-ARABIC_CHARS = frozenset("كيةىهأإؤًٌٍ")
+# Weaker evidence.
+NON_ARABIC_LETTERS = frozenset("پچژگکی")  # پ چ ژ گ ک ی: Urdu, Persian, Pashto...
+ARABIC_FORMS = frozenset("يكأ")  # ي ك أ: Arabic, but also Urdu typed on an Arabic keyboard
+HARAKAT = frozenset(map(chr, list(range(0x064B, 0x0653)) + [0x0670]))
+QURANIC_MARKS = frozenset(map(chr, range(0x06D6, 0x06EE)))
+ZWNJ = "‌"
 
-_ARTICLE_PREFIXES = ("ال", "لل", "بال", "وال", "فال", "كال", "ولل", "فلل")
-_NON_LETTERS = re.compile(r"[^\w]+", re.UNICODE)
+# Very common words that, on their own, lean one way.
+ARABIC_WORDS = frozenset((
+	"بسم", "الله", "لله", "والله", "بالله", "إن", "إنا", "أن", "في", "على", "عن", "مع", "إلى", "الى",
+	"رب", "يا", "قال", "هذا", "ذلك", "التي", "الذي", "كان", "ثم",
+))
+PERSIAN_WORDS = frozenset((
+	"است", "نیست", "هست", "این", "آن", "را", "به", "برای", "می", "بود", "شد", "هم", "چه", "آنها", "اینجا",
+))
+
+_TOKEN = re.compile(r"\S+")
+_STRIP = re.compile("[" + "".join(sorted(HARAKAT | QURANIC_MARKS)) + ZWNJ + "ـ]")
+
+STRONG = 2
+WEAK = 1
+# A word whose only hint is ي ك or أ: Arabic, unless the text is Urdu typed on an Arabic
+# keyboard, or Sindhi or Pashto, which write the Arabic yeh themselves.
+KEYBOARD_FORMS = "ar-forms"
+URDU_FAMILY = "ur"  # Urdu and anything written like it (Shahmukhi Punjabi, Saraiki); the caller picks the profile
 
 
-def evidence(text: str):
-	"""Returns (urdu_letter_count, arabic_letter_count)."""
-	ur = ar = 0
-	for ch in text:
-		if ch in URDU_CHARS:
-			ur += 1
-		elif ch in ARABIC_CHARS:
-			ar += 1
-	return ur, ar
+def word_evidence(word: str) -> Tuple[Optional[str], int]:
+	"""(language, strength) for one word; (None, 0) when the word could belong to any of them."""
+	letters = set(word)
+	if letters & PASHTO_LETTERS:
+		return "ps", STRONG
+	if letters & SINDHI_LETTERS:
+		return "sd", STRONG
+	if letters & URDU_LETTERS:
+		return "ur", STRONG
+	if letters & ARABIC_LETTERS or letters & QURANIC_MARKS or sum(c in HARAKAT for c in word) >= 2:
+		return "ar", STRONG
+	bare = _STRIP.sub("", word)
+	if bare in PERSIAN_WORDS or (ZWNJ in word and letters & NON_ARABIC_LETTERS):
+		return "fa", WEAK
+	if letters & NON_ARABIC_LETTERS:
+		return "xa", WEAK  # not Arabic, otherwise undecided
+	if bare in ARABIC_WORDS or (bare.startswith("ال") and len(bare) >= 4):
+		return "ar", WEAK
+	if letters & ARABIC_FORMS:
+		return KEYBOARD_FORMS, WEAK
+	return None, 0
 
 
-def soft_arabic_words(text: str) -> int:
-	"""Count of words of 4+ characters beginning with an Arabic joined definite article."""
-	n = 0
-	for w in _NON_LETTERS.split(text):
-		if len(w) >= 4 and w.startswith(_ARTICLE_PREFIXES):
-			n += 1
-	return n
+def uses_arabic_keyboard_forms(evidence: Iterable[Tuple[str, Optional[str], int]]) -> bool:
+	"""Urdu typed on an Arabic keyboard mixes ي/ك into words that also carry Urdu letters.
+	In such a text ي and ك say nothing about Arabic."""
+	return any(lang == "ur" and set(word) & ARABIC_FORMS for word, lang, _strength in evidence)
 
 
-def classify(text: str):
-	"""
-	Returns 'ur' or 'ar' based on letter forms and prefixes, or None if no evidence exists.
-	"""
-	ur, ar = evidence(text)
-	if ur > ar:
-		return "ur"
-	if ar > ur:
+def _forms_count_as_arabic(evidence, candidates) -> bool:
+	return not uses_arabic_keyboard_forms(evidence) and not ({"sd", "ps"} & set(candidates))
+
+
+def resolve_clause(
+	text: str,
+	candidates: Sequence[str],
+	detector: Optional[Callable[[str], Optional[str]]] = None,
+	ngram: Optional[Callable[[str], Optional[str]]] = None,
+) -> Optional[str]:
+	"""The language of an Arabic-script clause, as a base code ("ur" meaning the Urdu family).
+	`candidates` are the base codes the user has profiles for. None means the letters gave
+	no evidence and no model could decide."""
+	evidence = [(w,) + word_evidence(w) for w in _TOKEN.findall(text)]
+	strong = {}
+	weak = {}
+	for _word, lang, strength in evidence:
+		if lang is None:
+			continue
+		table = strong if strength == STRONG else weak
+		table[lang] = table.get(lang, 0) + 1
+	for lang in ("ps", "sd"):
+		if strong.get(lang) and lang in candidates:
+			return lang
+	if not strong and len(evidence) >= 3:
+		# No decisive letter: a statistical model on the whole clause beats weak hints.
+		for model in (detector, ngram):
+			if model is not None:
+				decided = model(text)
+				if decided in candidates:
+					return decided
+	arabicScore = STRONG * strong.get("ar", 0) + weak.get("ar", 0)
+	if _forms_count_as_arabic(evidence, candidates):
+		arabicScore += weak.get(KEYBOARD_FORMS, 0)
+	otherScore = STRONG * (strong.get("ur", 0) + strong.get("ps", 0) + strong.get("sd", 0)) + weak.get("fa", 0) + weak.get("xa", 0)
+	if arabicScore > otherScore:
 		return "ar"
-	if ur == 0 and soft_arabic_words(text) > 0:
-		return "ar"
+	if strong.get("ur"):
+		return URDU_FAMILY
+	if otherScore:
+		return "fa" if weak.get("fa") and "fa" in candidates else URDU_FAMILY
 	return None
 
 
-def split(text: str):
-	"""
-	Splits mixed Urdu/Arabic text word-by-word into [(piece_text, 'ur'|'ar')].
-	Words lacking evidence inherit their neighbor's language.
-	"""
-	tokens = re.findall(r"\S+\s*", text)
-	n = len(tokens)
-	if n == 0:
-		return [(text, "ur")]
+def word_languages(words: Sequence[str], clauseLang: str, candidates: Sequence[str] = ("ur", "ar")) -> List[str]:
+	"""The language of each word of a clause whose language is `clauseLang`.
+	Only a run with real evidence for another language leaves the clause language:
+	Arabic needs one decisive word or two weaker ones; inside Arabic, another language
+	needs a decisive word. A run is trimmed to its first and last evidence word, so the
+	plain words around a quotation stay with the sentence."""
+	evidence = [(w,) + word_evidence(w) for w in words]
+	if _forms_count_as_arabic(evidence, candidates):
+		evidence = [(w, "ar" if lang == KEYBOARD_FORMS else lang, s) for w, lang, s in evidence]
+	else:
+		evidence = [(w, None, 0) if lang == KEYBOARD_FORMS else (w, lang, s) for w, lang, s in evidence]
+	result = [clauseLang] * len(words)
+	clauseIsArabic = clauseLang == "ar"
 
-	raw = []
-	for tok in tokens:
-		u, a = evidence(tok)
-		if u > a:
-			raw.append("U")
-		elif a > u:
-			raw.append("A")
-		elif u == 0 and soft_arabic_words(tok) > 0:
-			raw.append("A")
-		else:
-			raw.append("N")
+	def isOther(lang, strength):
+		if lang is None:
+			return None  # neutral: may sit inside a run
+		if clauseIsArabic:
+			return lang != "ar" and strength == STRONG
+		return lang == "ar"
 
-	if all(r == "N" for r in raw):
-		return [(text, "ur")]
-
-	lab = [""] * n
-	w = 0
-	while w < n:
-		if raw[w] != "N":
-			lab[w] = raw[w]
-			w += 1
+	i = 0
+	while i < len(words):
+		if not isOther(evidence[i][1], evidence[i][2]):
+			i += 1
 			continue
-		e = w
-		while e < n and raw[e] == "N":
-			e += 1
-		left = raw[w - 1] if w > 0 else raw[e]
-		right = raw[e] if e < n else left
-		left_count = (e - w) if left == right else (e - w + 1) // 2
-		for q in range(w, e):
-			lab[q] = left if q - w < left_count else right
-		w = e
-
-	groups = []
-	for i in range(n):
-		if groups and groups[-1][0] == lab[i]:
-			groups[-1][2] = i + 1
-			if raw[i] != "N":
-				groups[-1][3] += 1
+		# Grow a run over other-language and neutral words.
+		end = i
+		j = i
+		while j < len(words):
+			state = isOther(evidence[j][1], evidence[j][2])
+			if state is False:
+				break
+			if state:
+				end = j
+			j += 1
+		run = evidence[i:end + 1]
+		if clauseIsArabic:
+			langs = [lang for _w, lang, s in run if lang not in (None, "ar") and s == STRONG]
+			target = max(set(langs), key=langs.count)
+			accept = True
 		else:
-			groups.append([lab[i], i, i + 1, 1 if raw[i] != "N" else 0])
+			target = "ar"
+			strongCount = sum(1 for _w, lang, s in run if lang == "ar" and s == STRONG)
+			weakCount = sum(1 for _w, lang, s in run if lang == "ar" and s == WEAK)
+			accept = strongCount >= 1 or weakCount >= 2
+		if accept:
+			for k in range(i, end + 1):
+				result[k] = target
+		i = end + 1
+	return result
 
-	while len(groups) > 1:
-		idx = next((k for k, g in enumerate(groups) if g[3] < 2), -1)
-		if idx < 0:
-			break
-		g = groups[idx]
-		prev = groups[idx - 1] if idx > 0 else None
-		nxt = groups[idx + 1] if idx + 1 < len(groups) else None
-		if prev is None:
-			to_prev = False
-		elif nxt is None:
-			to_prev = True
-		else:
-			to_prev = (prev[2] - prev[1]) >= (nxt[2] - nxt[1])
-		if to_prev:
-			prev[2] = g[2]
-			prev[3] += g[3]
-		else:
-			nxt[1] = g[1]
-			nxt[3] += g[3]
-		del groups[idx]
-		j = 0
-		while j < len(groups) - 1:
-			if groups[j][0] == groups[j + 1][0]:
-				groups[j][2] = groups[j + 1][2]
-				groups[j][3] += groups[j + 1][3]
-				del groups[j + 1]
-			else:
-				j += 1
 
-	return [("".join(tokens[g[1]:g[2]]), "ar" if g[0] == "A" else "ur") for g in groups]
+def classify(text: str) -> Optional[str]:
+	"""'ur' or 'ar' for a piece of text, or None without evidence (Urdu/Arabic only)."""
+	return resolve_clause(text, ("ur", "ar"))

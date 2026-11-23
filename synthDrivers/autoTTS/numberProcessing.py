@@ -2,7 +2,6 @@
 # Covered by GNU General Public License (GPL)
 
 import re
-import unicodedata
 
 # Private-Use-Area marker: unambiguous tag for reserved mobile numbers
 MOBILE_MARKER = "\uE000"
@@ -18,26 +17,13 @@ MONTHS_UR = [
 	"جولائی", "اگست", "ستمبر", "اکتوبر", "نومبر", "دسمبر"
 ]
 
-# Formatted number regex supporting ASCII and all Unicode decimal digits:
-# Matches dates (2026-10-17, 17/10/2026), times (11:45:07, 11:45 AM/PM),
-# currencies ($100, Rs. 500), decimals (3.14159), comma-grouped numbers (1,000,000)
-_DATE_TIME_REGEX = re.compile(
-	r"(?<![\w])"
-	r"(?:"
-	r"\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}"         # Dates: 2026-10-17, 17/10/2026, 17.10.2026
-	r"|"
-	r"\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:AM|PM|am|pm))?"  # Times: 11:45, 11:45:07, 11:45 AM
-	r")"
-	r"(?![\w])"
-)
-
 # Standard dates (YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY)
 _DATE_REGEX = re.compile(
 	r"(?<![\w])"
 	r"(?:"
 	r"((?:19|20)\d{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12]\d|3[01])"
 	r"|"
-	r"(0?[1-9]|[12]\d|3[01])[-/.](0?[1-9]|1[0-2])[-/.]( (?:19|20)\d{2})".replace(" (", "(") +
+	r"(0?[1-9]|[12]\d|3[01])[-/.](0?[1-9]|1[0-2])[-/.]((?:19|20)\d{2})"
 	r")"
 	r"(?![\w])"
 )
@@ -59,8 +45,6 @@ _NUMBER_REGEX = re.compile(r"(\d+(?:,\d+)*)(\.\d+)?")
 # Reserved mobile marker regex
 _RESERVED_MOBILE_REGEX = re.compile(MOBILE_MARKER + r"(\d(?: \d){9,14})")
 
-_MOBILE_PATTERNS = {"none", "spaces", "grouped", "words", "5-5", "3-3-4", "4-3-3", "2-2-2-2-2"}
-_LONG_NUMBER_MODES = {"none", "digits", "grouped", "ones", "tens", "hundreds", "group_2", "group_3", "group_4", "group_5"}
 _INDIAN_LABELS = ["thousand", "lakh", "crore", "arab", "kharab", "neel", "padma", "shankh"]
 
 _GROUPING = {
@@ -74,25 +58,6 @@ _GROUPING = {
 	"group_4": (4, True),
 	"group_5": (5, True),
 }
-
-
-def is_digit_char(ch: str) -> bool:
-	"""Returns True for any Unicode decimal digit (ASCII, Arabic, Devanagari, etc.)."""
-	return unicodedata.category(ch) == "Nd"
-
-
-def unicode_digits_to_ascii(text: str) -> str:
-	"""Converts any regional Unicode decimal digits in text to standard ASCII digits 0-9."""
-	out = []
-	for ch in text:
-		if unicodedata.category(ch) == "Nd":
-			try:
-				out.append(str(unicodedata.decimal(ch)))
-			except ValueError:
-				out.append(ch)
-		else:
-			out.append(ch)
-	return "".join(out)
 
 
 def _only_digits(text: str) -> str:
@@ -140,7 +105,7 @@ def expand_reserved_mobile(text: str, pattern: str = "spaces") -> str:
 
 	def _expand(m):
 		full = "".join(ch for ch in m.group(1) if ch.isdigit())
-		if pattern == "spaces" or pattern == "words":
+		if pattern == "spaces":
 			return " ".join(full)
 		elif pattern == "grouped":
 			if len(full) == 11 and full.startswith("0"):
@@ -202,8 +167,10 @@ def expand_reserved_dates(text: str, mode: str = "default", lang: str = "en") ->
 				return f"{y}{sep}{mo_str}{sep}{d_str}"
 			return f"{d_str}{sep}{mo_str}{sep}{y}"
 
-		base_lang = (lang or "en").lower().split("-")[0].split("_")[0]
-		months = MONTHS_UR if base_lang in ("ur", "pnb", "fa", "ar") else MONTHS_EN
+		# Urdu month names are also used in Shahmukhi Punjabi; Arabic and Persian name
+		# the months differently, so they keep the English names their voices read.
+		tag = (lang or "en").lower().replace("_", "-")
+		months = MONTHS_UR if tag.split("-")[0] in ("ur", "pnb") or tag in ("pa-pk", "pa-arab") else MONTHS_EN
 		mname = months[mo_int] if 1 <= mo_int <= 12 else mo_str
 
 		if mode == "day_month_name_year":
@@ -268,13 +235,11 @@ def _group_long_numbers(text: str, mode: str, accept_func):
 	return _NUMBER_REGEX.sub(_rewrite, text)
 
 
-def rewrite_long_numbers(text: str, mode: str = "grouped", min_digits: int = 5, crore_lakh: bool = True, crore_lakh_enabled: bool = None) -> str:
+def rewrite_long_numbers(text: str, mode: str = "grouped", min_digits: int = 5, crore_lakh: bool = True) -> str:
 	"""
 	Groups long digit strings (IDs, account numbers, etc.) according to chosen mode.
 	If crore_lakh is enabled, skips 6-9 digit numbers so they can be read as lakh/crore.
 	"""
-	if crore_lakh_enabled is not None:
-		crore_lakh = crore_lakh_enabled
 	return _group_long_numbers(
 		text,
 		mode,

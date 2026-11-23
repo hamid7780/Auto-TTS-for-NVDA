@@ -13,5 +13,9 @@ autoTTS.json*
 *.autotts
 tests/autoTTS-test-*
 NVDA All In One*
+# Reference projects kept locally for comparison; never part of this add-on
+espeak-ng/
+dialingo/
+.pytest_cache/
 .DS_Store
 Thumbs.db

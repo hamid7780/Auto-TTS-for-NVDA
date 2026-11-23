@@ -2,6 +2,8 @@
 # Covered by GNU General Public License (GPL)
 
 import os
+import queue
+import re
 import sys
 import threading
 import time
@@ -19,6 +21,8 @@ _MAX_BYTES_DETAILED = 5 * 1024 * 1024   # 5 MB when 'include the spoken text' is
 _MAX_TEXT = 400
 
 _lock = threading.Lock()
+_pending = queue.Queue()
+_writer = None
 _path = None
 _headerWritten = False
 _building = False
@@ -155,7 +159,7 @@ def describeText(text):
 			digits += 1
 		elif cat.startswith("P"):
 			punct += 1
-		elif cat == "So" and (ord(ch) >= 0x2190 or ord(ch) >= 0x1F000):
+		elif cat == "So" and ord(ch) >= 0x2190:
 			emoji += 1
 		elif cat.startswith("S"):
 			symbols += 1
@@ -208,6 +212,17 @@ def processMemoryMB():
 	return None
 
 
+def addonVersion():
+	"""The installed add-on's version, read from its manifest."""
+	manifest = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "manifest.ini")
+	try:
+		with open(manifest, encoding="utf-8") as f:
+			match = re.search(r'^version\s*=\s*"?([^"\r\n]+)', f.read(), re.M)
+		return match.group(1).strip() if match else "unknown"
+	except OSError:
+		return "unknown"
+
+
 def _systemInfoLines():
 	lines = []
 
@@ -221,7 +236,7 @@ def _systemInfoLines():
 	import platform
 
 	lines.append("--- Auto TTS Add-on ---")
-	add("Add-on version", lambda: "1.0.3")
+	add("Add-on version", addonVersion)
 	add("Add-on folder", lambda: os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 	lines.append("--- NVDA Environment ---")
@@ -275,37 +290,64 @@ def _header():
 	return "\n".join(lines) + "\n"
 
 
-def _append(path, text):
+def _writeLines(lines):
+	"""Append lines to the log, rotating it when it grows too large. Runs on the writer thread."""
+	global _headerWritten
+	path = _logPath()
+	if path is None:
+		return
+	try:
+		if os.path.getsize(path) > _maxBytes():
+			old = path[:-4] + " (previous).txt"
+			if os.path.exists(old):
+				os.remove(old)
+			os.replace(path, old)
+			_headerWritten = False
+	except OSError:
+		pass
+	text = "".join(lines)
+	if not _headerWritten:
+		_headerWritten = True
+		text = _header() + text
 	with open(path, "a", encoding="utf-8") as f:
 		f.write(text)
 
 
+def _writerLoop():
+	while True:
+		lines = [_pending.get()]
+		# Write everything queued so far in one file operation.
+		while True:
+			try:
+				lines.append(_pending.get_nowait())
+			except queue.Empty:
+				break
+		try:
+			with _lock:
+				_writeLines(lines)
+		except Exception:
+			pass
+
+
+def _ensureWriter():
+	global _writer
+	if _writer is None:
+		with _lock:
+			if _writer is None:
+				_writer = threading.Thread(target=_writerLoop, name="autoTTS-log", daemon=True)
+				_writer.start()
+
+
 def write(category, message):
-	"""Writes a line to the activity log with timestamp and category."""
-	global _headerWritten
+	"""Queue a line for the activity log. Disk access happens on a background thread so
+	speech is never delayed by the file system (or an antivirus scanning each append)."""
 	try:
 		if _building or not isEnabled():
 			return
 		timestamp = time.strftime("%Y-%m-%d %H:%M:%S") + f".{int(time.time() * 1000) % 1000:03d}"
 		threadName = threading.current_thread().name[:12]
-		line = f"{timestamp} [{threadName}] {category:<8} {message}\n"
-		with _lock:
-			path = _logPath()
-			if path is None:
-				return
-			try:
-				if os.path.getsize(path) > _maxBytes():
-					old = path[:-4] + " (previous).txt"
-					if os.path.exists(old):
-						os.remove(old)
-					os.replace(path, old)
-					_headerWritten = False
-			except OSError:
-				pass
-			if not _headerWritten:
-				_headerWritten = True
-				_append(path, _header())
-			_append(path, line)
+		_pending.put(f"{timestamp} [{threadName}] {category:<8} {message}\n")
+		_ensureWriter()
 	except Exception:
 		pass
 

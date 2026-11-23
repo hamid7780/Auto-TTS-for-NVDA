@@ -34,73 +34,6 @@ from . import devanagariGroupLid
 from . import sharedScriptLid
 from . import numberProcessing
 
-# Set of Urdu and Persian exclusive characters that never appear in standard Arabic text
-URDU_EXCLUSIVE_CHARS = frozenset({
-	0x0679,  # ٹ (TTeh)
-	0x0688,  # ڈ (DDal)
-	0x0691,  # ڑ (RReh)
-	0x06BA,  # ں (Noon Ghunna)
-	0x06C1,  # ہ (Heh Goal)
-	0x06C2,  # ۂ (Heh Goal with Hamza Above)
-	0x06C3,  # ۃ (Teh Marbuta Goal)
-	0x06BE,  # ھ (Heh Doachashmee)
-	0x06D2,  # ے (Yeh Barree)
-	0x06D3,  # ۓ (Yeh Barree with Hamza)
-	0x067E,  # پ (Peh)
-	0x0686,  # چ (Tcheh)
-	0x06AF,  # گ (Gaf)
-	0x0698,  # ژ (Zheh)
-	0x06CC,  # ی (Farsi/Urdu Yeh)
-	0x06A9,  # ک (Keheh / Urdu Kaf)
-	0x0658,  # ٘ (Noon Ghunna Mark)
-	0x0657,  # ٗ (Inverted Damma / Ulta Pesh)
-	0x06D4,  # ۔ (Urdu Full Stop)
-	0x067B,  # ٻ
-	0x0680,  # ڀ
-	0x0683,  # ٺ
-	0x0684,  # ٽ
-	0x0687,  # ڇ
-	0x068A,  # ڌ
-	0x068D,  # ڍ
-	0x068F,  # ڎ
-	0x0699,  # ڙ
-	0x06A6,  # ڦ
-	0x06AA,  # ګ
-	0x06AB,  # ڳ
-	0x06B1,  # ڱ
-	0x06B3,  # ڳ
-	0x06BB,  # ڻ
-	0x06BC,  # ݨ
-})
-
-# Arabic-exclusive characters
-ARABIC_EXCLUSIVE_CHARS = frozenset({
-	0x0629,  # ة (Teh Marbuta - standard Arabic)
-	0x064A,  # ي (Arabic Yeh with two dots below)
-	0x0643,  # ك (Arabic Kaf with mini-kaf inside)
-	0x0649,  # ى (Alef Maksura)
-})
-
-# Arabic Tashkeel, Harakat, and Quranic recitation marks
-ARABIC_TASHKEEL_CHARS = frozenset({
-	0x064B,  # ً (Fathatan / Do Zabar)
-	0x064C,  # ٌ (Dammatan / Do Pesh)
-	0x064D,  # ٍ (Kasratan / Do Zer)
-	0x064E,  # َ (Fatha / Zabar)
-	0x064F,  # ُ (Damma / Pesh)
-	0x0650,  # ِ (Kasra / Zer)
-	0x0651,  # ّ (Shadda / Tashdeed)
-	0x0652,  # ْ (Sukun / Jazam)
-	0x0670,  # ٰ (Superscript Alef / Khari Zabar)
-	0x0653,  # ٓ (Maddah Above)
-	0x0654,  # ٔ (Hamza Above)
-	0x0655,  # ٕ (Hamza Below)
-	*range(0x06D6, 0x06EE),
-	*range(0xFE70, 0xFE75),
-})
-
-QURANIC_MARKS = frozenset(range(0x06D6, 0x06EE))
-
 # Eastern Arabic and Arabic-Indic digit codepoints
 EASTERN_ARABIC_DIGIT_RANGE = range(0x06F0, 0x06FA)  # ۰۱۲۳۴۵۶۷۸۹
 ARABIC_INDIC_DIGIT_RANGE = range(0x0660, 0x066A)    # ٠١٢٣٤٥٦٧٨٩
@@ -114,48 +47,36 @@ GREEK_LETTERS = frozenset(range(0x0370, 0x03FF)) | frozenset(range(0x1F00, 0x200
 MATH_SYMBOLS = frozenset("+-−*/×÷=<>≤≥≈≠±√∞∑∏∫∂∆∇^‰%")
 
 # Recognized Arabic-script based languages
-ARABIC_SCRIPT_LANGS = frozenset({"ur", "ar", "fa", "ps", "sd", "ug", "ckb", "ks"})
+ARABIC_SCRIPT_LANGS = frozenset({"ur", "ar", "fa", "ps", "sd", "ug", "ckb", "ks", "pnb"})
 
-# Spoken names for punctuation and symbols when typed, deleted, or spoken in character mode / isolation
+# Spoken names for punctuation and symbols read on their own (a line or a typed character
+# made only of symbols). Honorific signs are handled by honorific_words() below. The Urdu
+# names match locale/*/symbols-autoTTS.dic, which NVDA itself uses; a test keeps them equal.
+_URDU_SYMBOLS: Dict[str, str] = {
+	"\u06d4": "ختمہ",           # Urdu full stop (۔)
+	"\u060c": "سکتہ",           # Arabic comma (،)
+	"\u061b": "وقفہ",           # Arabic semicolon (؛)
+	"\u061f": "سوالیہ نشان",     # Arabic question mark (؟)
+	"\u066a": "فیصد",           # Arabic percent sign (٪)
+	"\u060d": "تاریخ کا نشان",    # Date separator (؍)
+	"\u0601": "سن",             # Year sign (؁)
+	"\u060f": "مصرع",           # Misra sign (؏)
+	"\u060e": "نظم نشان",        # Poetic verse sign (؎)
+	"\u0614": "تخلص",           # Takhallus sign (ؔ)
+	".": "ختمہ",
+	",": "سکتہ",
+	"?": "سوالیہ نشان",
+	"!": "فجائیہ",
+	":": "رابطہ",
+	"-": "ڈیش",
+}
+
 SPOKEN_SYMBOLS: Dict[str, Dict[str, str]] = {
-	"ur": {
-		"\u06d4": "ختمہ",           # Urdu full stop (۔)
-		"\u060c": "سکتہ",           # Arabic/Urdu comma (،)
-		"\u061b": "وقفہ",           # Arabic/Urdu semicolon (؛)
-		"\u061f": "سوالیہ نشان",     # Arabic/Urdu question mark (؟)
-		"\u060d": "تاریخ کا نشان",    # Date separator (؍)
-		"\u060e": "شاعر کا نشان",     # Poetic sign (؎)
-		"\u060f": "مصرع کا نشان",     # Verse sign (؏)
-		"\u0610": "صلی اللہ علیہ وسلم",
-		"\u0611": "علیہ السلام",
-		"\u0612": "رحمۃ اللہ علیہ",
-		"\u0613": "رضی اللہ عنہ",
-		"\u0614": "تخلص کا نشان",
-		".": "ختمہ",
-		",": "کوما",
-		"?": "سوالیہ نشان",
-		"!": "استعجابیہ نشان",
-		":": "کولن",
-		"-": "ڈیش",
-	},
-	"pa-pk": {
-		"\u06d4": "ختمہ",
-		"\u060c": "سکتہ",
-		"\u061b": "وقفہ",
-		"\u061f": "سوالیہ نشان",
-		".": "ختمہ",
-		",": "کوما",
-		"?": "سوالیہ نشان",
-	},
-	"pnb": {
-		"\u06d4": "ختمہ",
-		"\u060c": "سکتہ",
-		"\u061b": "وقفہ",
-		"\u061f": "سوالیہ نشان",
-		".": "ختمہ",
-		",": "کوما",
-		"?": "سوالیہ نشان",
-	},
+	"ur": _URDU_SYMBOLS,
+	# Shahmukhi Punjabi uses the Urdu punctuation and its names.
+	"pa-pk": _URDU_SYMBOLS,
+	"pa-arab": _URDU_SYMBOLS,
+	"pnb": _URDU_SYMBOLS,
 	"ar": {
 		"\u060c": "فاصلة",           # Arabic comma (،)
 		"\u061b": "فاصلة منقوطة",    # Arabic semicolon (؛)
@@ -212,63 +133,128 @@ SPOKEN_SYMBOLS: Dict[str, Dict[str, str]] = {
 }
 
 
+# Arabic-script honorific signs and ligatures. Each one stands for whole words, so it is always read
+# as those words, wherever it appears and whichever synthesizer speaks it. Synthesizers either skip
+# these characters or know them only in some voices, and a lone combining sign such as U+0611 has no
+# base letter at all, so leaving them to the synthesizer produced silence.
+_URDU_HONORIFICS: Dict[str, str] = {
+	"ؐ": "صلی اللہ علیہ وسلم",
+	"ؑ": "علیہ السلام",
+	"ؒ": "رحمۃ اللہ علیہ",
+	"ؓ": "رضی اللہ عنہ",
+	"ﷲ": "اللہ",
+	"ﷺ": "صلی اللہ علیہ وسلم",
+	"ﷻ": "جل جلالہ",
+	"﷽": "بسم اللہ الرحمٰن الرحیم",
+}
+_ARABIC_HONORIFICS: Dict[str, str] = {
+	"ؐ": "صلى الله عليه وسلم",
+	"ؑ": "عليه السلام",
+	"ؒ": "رحمة الله عليه",
+	"ؓ": "رضي الله عنه",
+	"﷽": "بسم الله الرحمن الرحيم",
+}
+# The other Arabic ligatures of words (U+FDF0-U+FDFB) are read through their compatibility
+# decomposition, which Unicode defines as the spelled-out words.
+_WORD_LIGATURES = range(0xFDF0, 0xFDFC)
+HONORIFIC_CHARS = frozenset(_URDU_HONORIFICS) | frozenset(_ARABIC_HONORIFICS) | frozenset(map(chr, _WORD_LIGATURES))
+
+
+def is_arabic_script_lang(lang: Optional[str]) -> bool:
+	"""Whether a language tag is written in Arabic script (including Shahmukhi Punjabi)."""
+	if not lang:
+		return False
+	normFull, baseLang = normalize_language_code(lang)
+	return baseLang in ARABIC_SCRIPT_LANGS or normFull in ("pa-pk", "pa-arab")
+
+
+def _uses_urdu_spelling(lang: str) -> bool:
+	normFull, baseLang = normalize_language_code(lang)
+	return baseLang in ("ur", "pnb") or normFull in ("pa-pk", "pa-arab")
+
+
+def honorific_words(char: str, lang: str) -> Optional[str]:
+	"""The words an honorific sign or word ligature stands for, in the spelling of `lang`."""
+	if char not in HONORIFIC_CHARS:
+		return None
+	if _uses_urdu_spelling(lang) and char in _URDU_HONORIFICS:
+		return _URDU_HONORIFICS[char]
+	if char in _ARABIC_HONORIFICS:
+		return _ARABIC_HONORIFICS[char]
+	words = unicodedata.normalize("NFKC", char)
+	return words if words != char else None
+
+
+def expand_honorifics(text: str, lang: str) -> str:
+	"""Replace honorific signs and word ligatures with the words they stand for.
+	Only applies to Arabic-script languages; any other run is returned unchanged."""
+	if not text or not is_arabic_script_lang(lang) or not any(ch in HONORIFIC_CHARS for ch in text):
+		return text
+	pieces = []
+	for ch in text:
+		words = honorific_words(ch, lang)
+		pieces.append(f" {words} " if words else ch)
+	result = re.sub(r" {2,}", " ", "".join(pieces))
+	return result.strip() if text == text.strip() else result
+
+
+def has_content(text: str) -> bool:
+	"""Whether text contains a letter or digit, i.e. anything a synthesizer reads as words."""
+	return any(unicodedata.category(c)[0] in "LN" for c in text)
+
+
+def to_nvda_locale(lang: Optional[str]) -> str:
+	"""Convert a BCP-47 style tag (ur-pk) to NVDA's locale form (ur_PK).
+	NVDA's symbol and character tables are looked up by this form; a hyphenated
+	tag silently falls back to the English tables."""
+	normFull, _baseLang = normalize_language_code(lang)
+	parts = normFull.split("-")
+	if len(parts) == 1:
+		return parts[0]
+	region = parts[-1]
+	if len(region) == 2 or region.isdigit():
+		return "_".join(parts[:-1] + [region.upper()])
+	return "_".join(parts)
+
+
 def get_spoken_symbol(char: str, lang: str) -> Optional[str]:
-	"""Return the spoken name for an isolated punctuation/symbol character in the target language."""
+	"""Return the spoken name of a punctuation mark or symbol in the target language."""
 	if not char or not lang:
 		return None
+	words = honorific_words(char, lang)
+	if words:
+		return words
 	normFull, baseLang = normalize_language_code(lang)
-	lang_dict = SPOKEN_SYMBOLS.get(lang) or SPOKEN_SYMBOLS.get(normFull) or SPOKEN_SYMBOLS.get(baseLang)
+	lang_dict = SPOKEN_SYMBOLS.get(normFull) or SPOKEN_SYMBOLS.get(baseLang)
 	if lang_dict and char in lang_dict:
 		return lang_dict[char]
-
 	try:
 		import characterProcessing
-		desc = characterProcessing.processSpeechSymbol(lang, char)
-		if desc and desc != char:
-			return desc
-		desc = characterProcessing.getCharacterName(lang, char)
-		if desc and desc != char:
-			return desc
+		desc = characterProcessing.processSpeechSymbol(to_nvda_locale(lang), char)
+		if desc and desc.strip() and desc != char:
+			return desc.strip()
 	except Exception:
 		pass
-
 	return None
 
 
-def expand_spoken_symbols(text: str, lang: str, characterMode: bool = False) -> str:
-	"""Expand isolated symbols or punctuation to their spoken language-specific names."""
-	if not text:
-		return text
-	stripped = text.strip()
-	if not stripped:
-		return text
+def expand_spoken_symbols(text: str, lang: str) -> str:
+	"""Read every symbol of a symbol-only text by name in the target language.
 
-	has_content = any(unicodedata.category(c).startswith(("L", "N")) for c in stripped)
-	if has_content and not characterMode:
+	The caller decides when text is isolated (a line or character consisting only of
+	symbols). Text containing any letter or digit is returned unchanged: punctuation
+	inside a sentence shapes intonation and must never be read aloud by name."""
+	if not text or not text.strip() or has_content(text):
 		return text
-
-	is_only_symbols = all(unicodedata.category(c).startswith(("P", "S")) or c.isspace() for c in text)
-	if not (characterMode or is_only_symbols):
-		return text
-
-	if len(stripped) == 1:
-		spoken = get_spoken_symbol(stripped, lang)
-		if spoken:
-			return spoken
-		return text
-
 	parts = []
 	replaced_any = False
 	for ch in text:
 		if ch.isspace():
-			parts.append(ch)
 			continue
 		spoken = get_spoken_symbol(ch, lang)
 		if spoken:
-			parts.append(spoken)
 			replaced_any = True
-		else:
-			parts.append(ch)
+		parts.append(spoken or ch)
 	return " ".join(parts) if replaced_any else text
 
 # ISO 639-3 to 639-1 mappings
@@ -347,50 +333,69 @@ def get_base_language(lang: Optional[str]) -> str:
 	return normalize_language_code(lang)[1]
 
 
+def _urdu_family_profile(curLang: Optional[str], defaultLang: Optional[str], urduProfile: Optional[str]) -> str:
+	"""The profile for Urdu-family text: the current or default language when it is an
+	Arabic-script language other than Arabic (Urdu, Shahmukhi Punjabi...), else Urdu."""
+	for lang in (curLang, defaultLang):
+		if lang and is_arabic_script_lang(lang) and get_base_language(lang) not in ("ar", "fa", "ps", "sd"):
+			return lang
+	if urduProfile and is_arabic_script_lang(urduProfile):
+		return urduProfile
+	return "ur"
+
+
+def arabic_script_profile(
+	base: Optional[str],
+	curLang: Optional[str],
+	defaultLang: Optional[str],
+	candidates: Optional[Dict[str, str]] = None,
+	urduProfile: Optional[str] = None,
+) -> str:
+	"""Map a decision of persoArabicLid (a base code, or None) to the profile that reads it."""
+	candidates = candidates or {}
+	if base in (None, persoArabicLid.URDU_FAMILY):
+		if base is None:
+			# No evidence at all: stay with an Arabic-script language already in use.
+			for lang in (curLang, defaultLang):
+				if lang and is_arabic_script_lang(lang):
+					return lang
+		return _urdu_family_profile(curLang, defaultLang, urduProfile or candidates.get("ur"))
+	return candidates.get(base, base)
+
+
+def arabic_script_candidates(statisticalLanguages: Optional[Dict[str, str]]) -> Dict[str, str]:
+	"""Base code -> profile for the user's Arabic-script profiles."""
+	return {
+		base: profile
+		for base, profile in (statisticalLanguages or {}).items()
+		if is_arabic_script_lang(profile) or base in ARABIC_SCRIPT_LANGS
+	}
+
+
+def resolve_arabic_text(
+	text: str,
+	candidates: Dict[str, str],
+	detector=None,
+	useStatistics: bool = True,
+) -> Optional[str]:
+	"""The base language (persoArabicLid codes) of an Arabic-script clause, using letters
+	first and the statistical models only when the letters do not settle it."""
+	bases = tuple(sorted(set(candidates) | {"ur", "ar"}))
+	modelDetector = ngram = None
+	if useStatistics and len(candidates) >= 2:
+		detect = detector or statisticalDetection.detect_language
+		identity = {base: base for base in candidates}
+		modelDetector = lambda clause: detect(clause, identity)  # noqa: E731
+		enabled = set(candidates)
+		ngram = lambda clause: sharedScriptLid.model_decision(clause, "Arabic", enabled)  # noqa: E731
+	return persoArabicLid.resolve_clause(text, bases, modelDetector, ngram)
+
+
 @functools.lru_cache(maxsize=2048)
 def classify_arabic_segment(text: str, default_lang: str = "ur", current_lang: Optional[str] = None) -> str:
-	"""
-	Accurately classifies Arabic-script text as Urdu or Arabic with zero GIL latency via LRU cache.
-	Checks Quranic marks -> Urdu letter forms -> Arabic exclusive letters -> Tashkeel density.
-	"""
-	if not text:
-		return default_lang or "ur"
-
-	has_urdu = any(ord(c) in URDU_EXCLUSIVE_CHARS for c in text)
-	has_arabic_exclusive = any(ord(c) in ARABIC_EXCLUSIVE_CHARS for c in text)
-	has_quranic = any(ord(c) in QURANIC_MARKS for c in text)
-
-	if has_quranic:
-		return "ar"
-	if has_urdu and not has_arabic_exclusive:
-		return "ur"
-	if has_arabic_exclusive and not has_urdu:
-		return "ar"
-
-	tashkeel_count = sum(1 for c in text if ord(c) in ARABIC_TASHKEEL_CHARS)
-	letter_count = sum(1 for c in text if ord(c) not in ARABIC_TASHKEEL_CHARS and not c.isspace())
-
-	if tashkeel_count > 0:
-		is_tanween_word = (tashkeel_count == 1 and any(ord(c) == 0x064B for c in text))
-		is_single_vowel = (tashkeel_count == 1 and letter_count >= 2)
-
-		if (is_tanween_word or is_single_vowel) and not has_arabic_exclusive:
-			target = default_lang if default_lang in ARABIC_SCRIPT_LANGS else "ur"
-			return target
-
-		if letter_count > 0 and (tashkeel_count >= 3 or (tashkeel_count / letter_count) >= 0.35):
-			return "ar"
-
-	if has_urdu:
-		return "ur"
-	if has_arabic_exclusive:
-		return "ar"
-
-	if current_lang and current_lang in ARABIC_SCRIPT_LANGS:
-		return current_lang
-	if default_lang and default_lang in ARABIC_SCRIPT_LANGS:
-		return default_lang
-	return "ur"
+	"""Urdu or Arabic for a piece of Arabic-script text (letter evidence only)."""
+	decided = persoArabicLid.resolve_clause(text, ("ur", "ar"))
+	return arabic_script_profile(decided, current_lang, default_lang)
 
 
 @functools.lru_cache(maxsize=2048)
@@ -406,14 +411,83 @@ def get_char_type(c: str, protect_math: bool = True) -> str:
 		return "space"
 	if protect_math and (cp in GREEK_LETTERS or c in MATH_SYMBOLS):
 		return "math"
-	if cp in URDU_EXCLUSIVE_CHARS:
-		return "Arabic"
-	script = get_script(cp)
-	if script not in ("Common", "Inherited"):
-		return script
-	if category.startswith("P") or category.startswith("S"):
+	# Punctuation and symbols never start a language run of their own, even when Unicode
+	# assigns them a script (Urdu ۔ and ؟ are Arabic-script): inside text they belong to the
+	# surrounding words, and a symbol-only text is routed by symbol_only_language().
+	if category[0] in "PS":
 		return "punct"
-	return script
+	return get_script(cp)
+
+
+def _split_by_char_type(text: str, protect_math: bool):
+	"""Split text into runs of the same character type.
+	A combining mark joins the letter before it. A mark with no letter before it (a lone
+	honorific sign such as ؑ after a space) takes its own script, so it is still routed to a
+	language that can read it instead of being glued to whitespace or punctuation."""
+	runs = []
+	curr_type = None
+	curr_chars = []
+	for c in text:
+		ctype = get_char_type(c, protect_math=protect_math)
+		if ctype == "mark":
+			if curr_type not in (None, "space", "punct", "number", "math", "Common", "Inherited"):
+				curr_chars.append(c)
+				continue
+			script = get_script(ord(c))
+			ctype = script if script not in ("Common", "Inherited") else "punct"
+		if ctype == curr_type:
+			curr_chars.append(c)
+			continue
+		if curr_chars:
+			runs.append((curr_type, "".join(curr_chars)))
+		curr_type = ctype
+		curr_chars = [c]
+	if curr_chars:
+		runs.append((curr_type, "".join(curr_chars)))
+	return runs
+
+
+# Languages that write the danda (। ॥) as their full stop.
+_DANDA_LANGS = frozenset({"hi", "mr", "ne", "sa", "bho", "mai", "kok", "pa", "bn", "as", "or"})
+
+
+def symbol_only_language(
+	text: str,
+	curLang: str,
+	defaultLang: str,
+	scriptSettings: Dict[str, str],
+	keyboardLang: Optional[str] = None,
+) -> Optional[str]:
+	"""Choose the language for text made only of symbols, marks and spaces.
+
+	A symbol that belongs to one writing system (Urdu ۔ ؟ ؎, an honorific sign, the
+	Devanagari danda) is read in a language of that script, preferring the current and
+	then the default language when they already use it. A symbol shared by every script
+	(? or -) follows the keyboard language while typing, else stays in the current language."""
+	script = None
+	for ch in text:
+		candidate = get_script(ord(ch))
+		if candidate not in ("Common", "Inherited"):
+			script = candidate
+			break
+	if script is None:
+		return keyboardLang or None
+	if script == "Arabic":
+		for lang in (curLang, defaultLang):
+			if is_arabic_script_lang(lang):
+				return lang
+		mapped = scriptSettings.get("Arabic", "ur")
+		return mapped if is_arabic_script_lang(mapped) else "ur"
+	if script == "Devanagari" and any(ch in "।॥" for ch in text):
+		for lang in (curLang, defaultLang):
+			if lang and get_base_language(lang) in _DANDA_LANGS:
+				return lang
+	mapped = scriptSettings.get(script)
+	if not mapped:
+		return None
+	if curLang and get_base_language(curLang) == get_base_language(mapped):
+		return curLang
+	return mapped
 
 
 def _single_text_script(text: str, protect_math: bool = True) -> Optional[str]:
@@ -434,6 +508,7 @@ def _disambiguate_shared_script(
 	script: str,
 	candidates: Dict[str, str],
 	default_lang: str,
+	detector=None,
 ) -> Optional[str]:
 	"""
 	Script-gated character heuristics & n-gram disambiguation for shared scripts
@@ -441,20 +516,10 @@ def _disambiguate_shared_script(
 	"""
 	enabled_codes = set(candidates.keys())
 
-	# 1. Perso-Arabic (Urdu, Arabic, Persian, Sindhi)
+	# 1. Perso-Arabic (Urdu, Arabic, Persian, Pashto, Sindhi)
 	if script == "Arabic":
-		# First check Urdu-exclusive characters
-		if any(ord(c) in URDU_EXCLUSIVE_CHARS for c in text):
-			if "ur" in candidates:
-				return candidates["ur"]
-		# Check Bengali-style Assamese / Arabic letters via persoArabicLid
-		res = persoArabicLid.classify(text)
-		if res and res in candidates:
-			return candidates[res]
-		resolved = sharedScriptLid.resolve_segment(text, "Arabic", enabled_codes)
-		if resolved and resolved in candidates:
-			return candidates[resolved]
-		return candidates.get("ur", candidates.get("ar", default_lang))
+		decided = resolve_arabic_text(text, arabic_script_candidates(candidates), detector)
+		return arabic_script_profile(decided, default_lang, default_lang, candidates)
 
 	# 2. Devanagari (Hindi, Marathi, Nepali, Bhojpuri, etc.)
 	if script == "Devanagari":
@@ -508,7 +573,7 @@ def _statistical_target(
 		return None
 
 	# 1. Script-Gated Heuristics for shared scripts
-	shared_result = _disambiguate_shared_script(text, script, candidates, fallbackLanguage)
+	shared_result = _disambiguate_shared_script(text, script, candidates, fallbackLanguage, detector)
 	if shared_result:
 		return shared_result
 
@@ -546,6 +611,7 @@ def addDetectedLanguageCommands(
 	statisticalDetector=None,
 	currentLang=None,
 	activeKeyboardLang=None,
+	protectedTexts=None,
 ):
 	"""
 	Segments speech sequences by script and language with support for:
@@ -557,7 +623,13 @@ def addDetectedLanguageCommands(
 	if scriptSettings is None:
 		scriptSettings = dict(DEFAULT_SCRIPT_MAPPINGS)
 
+	arabicCandidates = arabic_script_candidates(statisticalLanguages)
 	curLang = currentLang or defaultLang
+	if curLang != defaultLang:
+		# The caller routes untagged text to the default language, so continuing in the
+		# previous utterance's language must be stated, or text that needs no switch of its
+		# own (more Urdu after Urdu) would be read by the default voice.
+		yield LangChangeCommand(curLang)
 	buffer = []
 	explicitLangActive = False
 	characterModeActive = False
@@ -599,6 +671,40 @@ def addDetectedLanguageCommands(
 			buffer.append(item)
 			continue
 
+		# A text with no letters or digits (a line holding only ؟ or ؑ, or one typed symbol)
+		# is routed by the script its symbols belong to.
+		if not has_content(item):
+			if not item.isspace():
+				targetLang = symbol_only_language(
+					item,
+					curLang,
+					defaultLang,
+					scriptSettings,
+					keyboardLang=activeKeyboardLang if characterModeActive else None,
+				)
+				if targetLang and targetLang != curLang:
+					flushed = flush()
+					if flushed:
+						yield flushed
+					curLang = targetLang
+					yield LangChangeCommand(curLang)
+			buffer.append(item)
+			continue
+
+		# NVDA's own words (role and state names such as "link" or "button") are never
+		# statistically scored: one short word is too little evidence and was often misread
+		# as another language written in the same script.
+		itemUsesStatistics = useStatisticalDetection and not (
+			protectedTexts and item.strip().lower() in protectedTexts
+		)
+		arabicStatistics = itemUsesStatistics and not characterModeActive
+
+		def arabicProfile(base):
+			return arabic_script_profile(
+				base, curLang, defaultLang, arabicCandidates,
+				arabicCandidates.get("ur") or scriptSettings.get("Arabic"),
+			)
+
 		# Sentence / Line granularity modes
 		if granularityMode in ("sentence", "line"):
 			if granularityMode == "line":
@@ -608,10 +714,11 @@ def addDetectedLanguageCommands(
 				units = [unit for unit in units if unit]
 
 			for unit in units:
+				# One vote per word, not per character: four short Urdu words must outvote
+				# two long English ones in "ہم نے Facebook پر post کیا".
 				counts = {}
 				arabicCandidate = None
-				for c in unit:
-					ctype = get_char_type(c, protect_math=protectMathSymbols)
+				for ctype, _run in _split_by_char_type(unit, protectMathSymbols):
 					if ctype in ("mark", "space", "punct", "Common", "Inherited"):
 						continue
 					if ctype == "number":
@@ -623,10 +730,13 @@ def addDetectedLanguageCommands(
 							candidate = curLang
 					elif ctype == "Arabic":
 						if arabicCandidate is None:
-							arabicCandidate = (
-								classify_arabic_segment(unit, default_lang=defaultLang, current_lang=curLang)
-								if smartUrduArabic else scriptSettings.get("Arabic", "ur")
-							)
+							if smartUrduArabic:
+								arabicText = " ".join(r for t, r in _split_by_char_type(unit, protectMathSymbols) if t == "Arabic")
+								arabicCandidate = arabicProfile(
+									resolve_arabic_text(arabicText, arabicCandidates, statisticalDetector, arabicStatistics)
+								)
+							else:
+								arabicCandidate = scriptSettings.get("Arabic", "ur")
 						candidate = arabicCandidate
 					elif ctype == "math":
 						candidate = (
@@ -638,7 +748,7 @@ def addDetectedLanguageCommands(
 					counts[candidate] = counts.get(candidate, 0) + 1
 
 				targetLang = max(counts, key=counts.get) if counts else curLang
-				if useStatisticalDetection and not characterModeActive and len(unit.strip()) > 2:
+				if itemUsesStatistics and not characterModeActive and len(unit.strip()) > 2:
 					unitScript = _single_text_script(unit, protect_math=protectMathSymbols)
 					statisticalTarget = _statistical_target(
 						unit,
@@ -669,7 +779,8 @@ def addDetectedLanguageCommands(
 			clauseScript = _single_text_script(clause, protect_math=protectMathSymbols)
 			unicodeFallback = scriptSettings.get(clauseScript, curLang) if clauseScript else curLang
 			clauseTarget = None
-			if useStatisticalDetection and not characterModeActive and len(clause.strip()) > 2:
+			arabicHandledByLetters = smartUrduArabic and clauseScript == "Arabic"
+			if itemUsesStatistics and not characterModeActive and len(clause.strip()) > 2 and not arabicHandledByLetters:
 				clauseTarget = _statistical_target(
 					clause,
 					clauseScript,
@@ -679,55 +790,31 @@ def addDetectedLanguageCommands(
 					characterMode=characterModeActive,
 				)
 
-			# Pre-scan for formatted numbers/dates/times to prevent token fragmentation
-			numMatches = list(_FORMATTED_NUMBER_RE.finditer(clause))
+			# Formatted numbers, dates and times stay single atomic tokens.
+			clauseSegments = []
 			lastPos = 0
-			for nm in numMatches:
+			for nm in _FORMATTED_NUMBER_RE.finditer(clause):
 				start, end = nm.span()
-				if start > lastPos:
-					# Process text preceding the number
-					sub = clause[lastPos:start]
-					curr_type = None
-					curr_chars = []
-					for c in sub:
-						ctype = get_char_type(c, protect_math=protectMathSymbols)
-						if ctype == "mark":
-							curr_chars.append(c)
-							continue
-						if ctype == curr_type:
-							curr_chars.append(c)
-						else:
-							if curr_chars:
-								segments.append((curr_type, "".join(curr_chars), clauseScript, clauseTarget))
-							curr_type = ctype
-							curr_chars = [c]
-					if curr_chars:
-						segments.append((curr_type, "".join(curr_chars), clauseScript, clauseTarget))
-
-				# Entire formatted number as single atomic token
-				segments.append(("number", nm.group(0), clauseScript, clauseTarget))
+				clauseSegments.extend(_split_by_char_type(clause[lastPos:start], protectMathSymbols))
+				clauseSegments.append(("number", nm.group(0)))
 				lastPos = end
+			clauseSegments.extend(_split_by_char_type(clause[lastPos:], protectMathSymbols))
 
-			if lastPos < len(clause):
-				sub = clause[lastPos:]
-				curr_type = None
-				curr_chars = []
-				for c in sub:
-					ctype = get_char_type(c, protect_math=protectMathSymbols)
-					if ctype == "mark":
-						curr_chars.append(c)
-						continue
-					if ctype == curr_type:
-						curr_chars.append(c)
-					else:
-						if curr_chars:
-							segments.append((curr_type, "".join(curr_chars), clauseScript, clauseTarget))
-						curr_type = ctype
-						curr_chars = [c]
-				if curr_chars:
-					segments.append((curr_type, "".join(curr_chars), clauseScript, clauseTarget))
+			# Arabic-script words: decide the clause from all its words together, then let
+			# only a run with real evidence (a quoted Arabic phrase) take another language.
+			arabicTargets = {}
+			arabicIndexes = [i for i, (stype, _text) in enumerate(clauseSegments) if stype == "Arabic"]
+			if smartUrduArabic and arabicIndexes:
+				words = [clauseSegments[i][1] for i in arabicIndexes]
+				clauseBase = resolve_arabic_text(" ".join(words), arabicCandidates, statisticalDetector, arabicStatistics)
+				fallback = clauseBase or persoArabicLid.URDU_FAMILY
+				wordBases = persoArabicLid.word_languages(words, fallback, tuple(set(arabicCandidates) | {"ur", "ar"}))
+				for i, wordBase in zip(arabicIndexes, wordBases):
+					arabicTargets[i] = arabicProfile(clauseBase if wordBase == fallback else wordBase)
+			for i, (stype, stext) in enumerate(clauseSegments):
+				segments.append((stype, stext, clauseScript, clauseTarget, arabicTargets.get(i)))
 
-		for stype, stext, clauseScript, clauseTarget in segments:
+		for stype, stext, clauseScript, clauseTarget, arabicTarget in segments:
 			if stype in ("space", "punct", "Common", "Inherited"):
 				if characterModeActive and activeKeyboardLang and stype != "space":
 					targetLang = activeKeyboardLang
@@ -787,8 +874,8 @@ def addDetectedLanguageCommands(
 				continue
 
 			if stype == "Arabic":
-				if smartUrduArabic:
-					targetLang = classify_arabic_segment(stext, default_lang=defaultLang, current_lang=curLang)
+				if arabicTarget:
+					targetLang = arabicTarget
 				else:
 					arabic_lang = scriptSettings.get("Arabic", "ur") if scriptSettings else "ur"
 					targetLang = arabic_lang if arabic_lang in ARABIC_SCRIPT_LANGS else "ur"

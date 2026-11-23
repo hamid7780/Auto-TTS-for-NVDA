@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.2.0
+
+- Fixed silent symbol lines: a line, or a character you move to or type, that holds only symbols such as `؟`, `۔` or `؎` is now read by name in the language of its script with every synthesizer, including eSpeak NG. Punctuation inside a sentence is no longer switched to another voice.
+- Fixed honorific signs: `ؐ ؑ ؒ ؓ` and the ligatures `ﷲ ﷺ ﷻ ﷽` are always read as the words they stand for, alone or inside a sentence. A sign after a space or after an English word is no longer silent.
+- Fixed names of symbols being spelled letter by letter while moving by character.
+- Fixed text in the same language as the end of the previous utterance being read with the default voice when NVDA did not interrupt speech in between.
+- Fixed rate, pitch and volume changes from the synthesizer settings ring not being heard until the language changed, for profiles with custom rate, pitch and volume.
+- Fixed the settings panel starting a second copy of a synthesizer that was already speaking, and never closing the copies it made. Test Speech now also stops Auto TTS speech before playing.
+- Fixed Reset All saving before every setting was reset, and resetting number settings to values different from a new installation.
+- Fixed Arabic and Persian dates being read with Urdu month names.
+- Fixed a Say All chunk at a slow speech rate being cut off by the safety timer, and paused speech being skipped.
+- NVDA's role and state names (link, button, checked) are no longer sent to the FastText model, so they keep the right voice.
+- NVDA now looks up symbols and character descriptions in the correct regional table for profiles such as `ur-PK` and `pa-PK`, instead of falling back to English.
+- The Urdu and Punjabi symbol dictionary is registered the way NVDA supports for add-ons, and appears in NVDA's speech settings as "Auto TTS Urdu and Punjabi symbols".
+- The activity log is written in the background, so logging no longer delays speech. The log header now shows the real add-on version.
+- Rewrote Arabic-script detection. A sentence is judged as a whole, so Arabic sentences and the Basmala are no longer partly read as Urdu, and a quoted Arabic phrase inside Urdu still gets the Arabic voice. Persian, Pashto and Sindhi profiles are now used: before, letters these languages share with Urdu sent all of them to Urdu. Urdu typed on an Arabic keyboard stays Urdu.
+- Fixed sentence and line mode reading an Urdu sentence with two English words in English: languages are now counted by words, not letters.
+- Fixed Auto TTS telling NVDA that speech had finished while more of the utterance was still queued.
+- Fixed a possible freeze with SAPI5 voices and timers created on a synthesizer's audio thread: completion reports are now handled on NVDA's main thread.
+- Relative pitch, rate and volume changes (such as the higher pitch for capitals) are measured against the voice that speaks, without changing NVDA's own speech classes.
+- Rate, pitch and volume changes from the settings ring are saved once after you stop changing them, not on every key press.
+- Every configured synthesizer and the shared-script language models are now started shortly after NVDA starts, so the first switch to another voice does not wait for them.
+- The language lock is now also in NVDA's synthesizer settings ring and Voice settings.
+- Added a labeled Urdu, Arabic, Persian, Pashto, Sindhi and mixed-language test corpus.
+- Removed unused code and left-over files, and restored regression tests that had been deleted.
+
 ## 1.1.2
 
 - Differentiated Punjabi scripts: separated Punjabi (Gurmukhi) (India) and Punjabi (Shahmukhi) (Pakistan) with clear native naming in settings and language selection.

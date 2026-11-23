@@ -35,9 +35,10 @@ class EnhancementsTests(unittest.TestCase):
 		decision = persoArabicLid.classify(arabicText)
 		self.assertEqual(decision, "ar")
 
-		# Test sharedScriptLid resolve_segment
-		self.assertEqual(sharedScriptLid.resolve_segment(urduText, "Arabic", {"ur", "ar"}), "ur")
-		self.assertEqual(sharedScriptLid.resolve_segment(arabicText, "Arabic", {"ur", "ar"}), "ar")
+		# Clause-level resolution with Urdu and Arabic profiles
+		profiles = {"ur": "ur", "ar": "ar"}
+		self.assertEqual(languageDetection.resolve_arabic_text(urduText, profiles, useStatistics=False), "ur")
+		self.assertEqual(languageDetection.resolve_arabic_text(arabicText, profiles, useStatistics=False), "ar")
 
 	def test_devanagari_heuristics(self):
 		# Marathi specific letters
@@ -80,11 +81,11 @@ class EnhancementsTests(unittest.TestCase):
 	def test_long_numbers_processing(self):
 		# Digits mode
 		text = "Order 12345678 placed."
-		rewritten = numberProcessing.rewrite_long_numbers(text, mode="digits", min_digits=5, crore_lakh_enabled=False)
+		rewritten = numberProcessing.rewrite_long_numbers(text, mode="digits", min_digits=5, crore_lakh=False)
 		self.assertIn("1 2 3 4 5 6 7 8", rewritten)
 
 		# Grouped mode
-		rewritten = numberProcessing.rewrite_long_numbers(text, mode="grouped", min_digits=5, crore_lakh_enabled=False)
+		rewritten = numberProcessing.rewrite_long_numbers(text, mode="grouped", min_digits=5, crore_lakh=False)
 		self.assertIn("12 345 678", rewritten)
 
 		# Crore Lakh mode for Indian numbering
@@ -376,16 +377,22 @@ class EnhancementsTests(unittest.TestCase):
 		))
 		self.assertEqual([getattr(x, "lang", None) for x in seq if isinstance(x, languageDetection.LangChangeCommand)], ["ur"])
 
-		# Spoken symbol name expansions:
+		# Spoken symbol name expansions (symbol-only text):
 		self.assertEqual(languageDetection.expand_spoken_symbols("۔", "ur"), "ختمہ")
-		self.assertEqual(languageDetection.expand_spoken_symbols("۔", "ur", characterMode=True), "ختمہ")
 		self.assertEqual(languageDetection.expand_spoken_symbols("یہ ایک کتاب ہے۔", "ur"), "یہ ایک کتاب ہے۔")
-		self.assertEqual(languageDetection.expand_spoken_symbols(".", "ur", characterMode=True), "ختمہ")
+		self.assertEqual(languageDetection.expand_spoken_symbols(".", "ur"), "ختمہ")
 		self.assertEqual(languageDetection.expand_spoken_symbols("،", "ur"), "سکتہ")
 		self.assertEqual(languageDetection.expand_spoken_symbols("؟", "ur"), "سوالیہ نشان")
+		self.assertEqual(languageDetection.expand_spoken_symbols("؏", "ur"), "مصرع")
+		self.assertEqual(languageDetection.expand_spoken_symbols("؎", "ur"), "نظم نشان")
+		self.assertEqual(languageDetection.expand_spoken_symbols("ؔ", "ur"), "تخلص")
 		self.assertEqual(languageDetection.expand_spoken_symbols("۔", "ar"), "نقطة")
 		self.assertEqual(languageDetection.expand_spoken_symbols("।", "hi"), "पूर्ण विराम")
 		self.assertEqual(languageDetection.expand_spoken_symbols("।", "pa"), "ਡੰਡੀ")
+		self.assertEqual(languageDetection.expand_spoken_symbols("؟ ؟", "ur"), "سوالیہ نشان سوالیہ نشان")
+		# Honorific signs are words, read in the spelling of the language
+		self.assertEqual(languageDetection.expand_spoken_symbols("ؑ", "ur"), "علیہ السلام")
+		self.assertEqual(languageDetection.expand_spoken_symbols("ؑ", "ar"), "عليه السلام")
 
 	def test_driver_speaks_spoken_symbol_name_for_khatma(self):
 		oldLanguages = sharedConfig.languages
@@ -422,16 +429,37 @@ class EnhancementsTests(unittest.TestCase):
 			d._activeForwardIndices = set()
 			d._voice = "en"
 			d._activePreparedLang = None
-			d._lastPreparedLang = None
 			d._getSynth = lambda lang: synthInstance
 
-			# Typing khatma
+			# Typing khatma for non-espeak synth (Google TTS, etc.) -> receives expanded 'ختمہ'
 			d.speak([languageDetection.CharacterModeCommand(True), "۔"])
-			# Child synth receives 'ختمہ'
 			self.assertEqual(len(synthInstance.spokenSequences), 1)
 			seq = synthInstance.spokenSequences[0]
 			text = "".join(x for x in seq if isinstance(x, str))
 			self.assertEqual(text, "ختمہ")
+
+			# Character mode is switched off around the name, or it would be spelled letter by letter
+			modeBeforeText = None
+			for item in seq:
+				if isinstance(item, languageDetection.CharacterModeCommand):
+					modeBeforeText = item.state
+				elif isinstance(item, str):
+					break
+			self.assertIs(modeBeforeText, False)
+			self.assertIs([x for x in seq if isinstance(x, languageDetection.CharacterModeCommand)][-1].state, True)
+
+			# eSpeak is treated like every other synth: it would treat a raw ۔ as a silent pause
+			espeakInstance = MockSynth()
+			espeakInstance.name = "espeak"
+			sharedConfig.languages["ur"] = LanguageVoiceConfig("ur", synth="espeak", voice="ur")
+			d._getSynth = lambda lang: espeakInstance
+			d._synth = None
+			d._isSpeaking = False
+			d._activePreparedLang = None
+			d.speak([languageDetection.CharacterModeCommand(True), "۔"])
+			self.assertEqual(len(espeakInstance.spokenSequences), 1)
+			text2 = "".join(x for x in espeakInstance.spokenSequences[0] if isinstance(x, str))
+			self.assertEqual(text2, "ختمہ")
 		finally:
 			sharedConfig.languages = oldLanguages
 			sharedConfig.defaultLang = oldDefault
@@ -485,6 +513,38 @@ class EnhancementsTests(unittest.TestCase):
 		for m in real_mobiles:
 			res = numberProcessing.reserve_mobile(m, "spaces")
 			self.assertIn(numberProcessing.MOBILE_MARKER, res)
+
+	def test_load_settings_refreshes_prepared_state_without_terminating_cached_synths(self):
+		class DummyChildSynth:
+			def __init__(self):
+				self.cancelled = False
+				self.terminated = False
+			def cancel(self):
+				self.cancelled = True
+			def terminate(self):
+				self.terminated = True
+
+		d = driver.SynthDriver.__new__(driver.SynthDriver)
+		child = DummyChildSynth()
+		d._synthCache = {"dummy": (child, {})}
+		d._synth = child
+		d._isSpeaking = False
+		d._activePreparedLang = "en"
+		d.speechQueue = driver.queue.Queue()
+		d._voice = "en"
+		oldLangs = sharedConfig.languages
+		sharedConfig.languages = {"en": LanguageVoiceConfig("en")}
+		try:
+			d.loadSettings()
+		finally:
+			sharedConfig.languages = oldLangs
+
+		# Cached synth must NOT be cancelled or terminated, and cache must remain intact
+		self.assertFalse(child.cancelled)
+		self.assertFalse(child.terminated)
+		self.assertIn("dummy", d._synthCache)
+		# Prepared states must be reset so updated profile settings take effect immediately
+		self.assertIsNone(d._activePreparedLang)
 
 	def test_manifest_has_no_changelog_and_release_notes_clean(self):
 		from pathlib import Path

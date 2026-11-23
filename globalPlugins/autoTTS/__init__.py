@@ -179,7 +179,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		try:
 			synth = synthDriverHandler.getSynth()
 			if getattr(synth, "name", "") == "autoTTS":
-				synth._prewarmConfiguredHighLatencySynths()
+				synth.prewarm()
 		except Exception:
 			pass
 

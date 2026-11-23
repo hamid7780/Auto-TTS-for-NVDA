@@ -60,17 +60,3 @@ class NgramModel:
 						total[k] += v[j]
 		scale = self.scale * max(1, count)
 		return {l: total[k] / scale for k, l in enumerate(langs)}
-
-	def best(self, text, candidates=None):
-		"""Returns (best_language, margin_to_second_best)."""
-		s = sorted(self.scores(text, candidates).items(), key=lambda kv: -kv[1])
-		if not s:
-			return None, 0.0
-		return s[0][0], (s[0][1] - s[1][1] if len(s) > 1 else 9.0)
-
-	def decide(self, text, candidates, default, tau=0.2):
-		"""Returns best language if margin >= tau; otherwise returns default."""
-		lang, margin = self.best(text, candidates)
-		if lang is None:
-			return default
-		return lang if (lang == default or margin >= tau) else default

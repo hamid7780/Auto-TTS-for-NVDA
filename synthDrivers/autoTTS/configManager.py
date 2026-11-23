@@ -1,6 +1,7 @@
 # Auto TTS for NVDA - Configuration Manager
 # Covered by GNU General Public License (GPL)
 
+import dataclasses
 import json
 import os
 import shutil
@@ -120,6 +121,12 @@ class AutoTTSConfig:
 	"""
 
 	def __init__(self):
+		self._saveTimer = None
+		self._setDefaults()
+		self.load()
+
+	def _setDefaults(self):
+		"""Every setting at its default. Used at startup and by Reset All, so the two never differ."""
 		self.languages: Dict[str, LanguageVoiceConfig] = {}
 		self.enabled: bool = True
 		# Empty means follow NVDA/Windows language until the user selects a profile.
@@ -145,7 +152,12 @@ class AutoTTSConfig:
 		self.firstRun: bool = True
 		self._emptyProfilesIntentional: bool = False
 		self.scriptMapping: Dict[str, str] = dict(DEFAULT_SCRIPT_MAPPINGS)
-		self.load()
+
+	def resetToDefaults(self):
+		"""Forget every profile and setting. The caller saves (allowEmptyProfiles=True)."""
+		self._setDefaults()
+		self.firstRun = False
+		self._emptyProfilesIntentional = True
 
 	@property
 	def largeNumberFormat(self) -> str:
@@ -373,7 +385,35 @@ class AutoTTSConfig:
 
 	def save(self, allowEmptyProfiles=False):
 		"""Saves settings to primary JSON storage."""
+		self._cancelScheduledSave()
 		self._saveToJSON(allowEmptyProfiles=allowEmptyProfiles)
+
+	def scheduleSave(self, delayMs: int = 2000):
+		"""Save a little later. Settings-ring keys can change a value many times a second;
+		each save rewrites the file and its backup, so repeated changes are written once."""
+		try:
+			import wx
+			if not wx.IsMainThread():
+				raise RuntimeError("not on the main thread")
+			if self._saveTimer is not None and self._saveTimer.IsRunning():
+				self._saveTimer.Restart(delayMs)
+			else:
+				self._saveTimer = wx.CallLater(delayMs, self.save)
+		except Exception:
+			self.save()
+
+	def flushPendingSave(self):
+		"""Write a scheduled save now, if one is waiting."""
+		if self._saveTimer is not None and self._saveTimer.IsRunning():
+			self.save()
+
+	def _cancelScheduledSave(self):
+		timer, self._saveTimer = self._saveTimer, None
+		if timer is not None:
+			try:
+				timer.Stop()
+			except Exception:
+				pass
 
 	def exportConfig(self, exportFilePath: str):
 		"""Exports complete settings to a backup file (.autotts or .json)."""
@@ -447,47 +487,22 @@ class AutoTTSConfig:
 		if resolvedCode in self.languages:
 			return self.languages[resolvedCode]
 
-		# 4. Base language inheritance (e.g. en-PK -> inherits 'en' profile)
-		if baseLang in self.languages:
-			baseCfg = self.languages[baseLang]
-			return LanguageVoiceConfig(
-				lang=langCode,
-				synth=baseCfg.synth,
-				voice=baseCfg.voice,
-				sendLang=baseCfg.sendLang,
-				enabled=baseCfg.enabled,
-				profile=baseCfg.profile,
-				useCustomProsody=baseCfg.useCustomProsody,
-				customRate=baseCfg.customRate,
-				customPitch=baseCfg.customPitch,
-				customVolume=baseCfg.customVolume,
-			)
-
-		# 5. Check if defaultLang matches base language
-		defNormFull, defBase = normalize_language_code(self.defaultLang)
+		# 4. A dialect of the default language uses the default profile.
+		_defNormFull, defBase = normalize_language_code(self.defaultLang)
 		if baseLang == defBase and self.defaultLang in self.languages:
-			baseCfg = self.languages[self.defaultLang]
-			return LanguageVoiceConfig(
-				lang=langCode,
-				synth=baseCfg.synth,
-				voice=baseCfg.voice,
-				sendLang=baseCfg.sendLang,
-				enabled=baseCfg.enabled,
-				profile=baseCfg.profile,
-				useCustomProsody=baseCfg.useCustomProsody,
-				customRate=baseCfg.customRate,
-				customPitch=baseCfg.customPitch,
-				customVolume=baseCfg.customVolume,
-			)
+			return dataclasses.replace(self.languages[self.defaultLang], lang=langCode)
 
-		# 6. Return a temporary default config without storing it
+		# 5. Return a temporary default config without storing it
 		return LanguageVoiceConfig(lang=langCode)
 
-	def setLanguageConfig(self, langConfig: LanguageVoiceConfig):
-		"""Updates a language config and persists immediately."""
+	def setLanguageConfig(self, langConfig: LanguageVoiceConfig, saveLater: bool = False):
+		"""Updates a language config and persists it (soon, with saveLater)."""
 		self._emptyProfilesIntentional = False
 		self.languages[langConfig.lang] = langConfig
-		self.save()
+		if saveLater:
+			self.scheduleSave()
+		else:
+			self.save()
 
 	def removeLanguageConfig(self, langCode: str):
 		"""Removes a language configuration and persists immediately."""

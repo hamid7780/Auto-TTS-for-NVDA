@@ -1,0 +1,24 @@
+# Auto TTS for NVDA: Urdu symbols
+# Registered through [symbolDictionaries] in manifest.ini.
+complexSymbols:
+
+symbols:
+# identifier	replacement[[	level][	preserve]][	# display name]
+۔	ختمہ	some	always	# Urdu full stop
+،	سکتہ	all	always	# Arabic comma
+؛	وقفہ	most	always	# Arabic semicolon
+؟	سوالیہ نشان	all	always	# Arabic question mark
+٪	فیصد	some	# Arabic percent sign
+؍	تاریخ کا نشان	all	always	# Date separator
+؁	سن	most	# Year sign
+؏	مصرع	all	always	# Misra sign
+؎	نظم نشان	all	always	# Poetic verse sign
+ؔ	تخلص	most	# Takhallus sign
+ؐ	صلی اللہ علیہ وسلم	none	# Sallallahu alayhi wasallam sign
+ؑ	علیہ السلام	none	# Alayhis salam sign
+ؒ	رحمۃ اللہ علیہ	none	# Rahmatullah alayh sign
+ؓ	رضی اللہ عنہ	none	# Radi Allahu anhu sign
+ﷲ	اللہ	none	# Allah ligature
+ﷺ	صلی اللہ علیہ وسلم	none	# Sallallahu alayhi wasallam ligature
+ﷻ	جل جلالہ	none	# Jalla jalaluhu ligature
+﷽	بسم اللہ الرحمٰن الرحیم	none	# Bismillah ligature

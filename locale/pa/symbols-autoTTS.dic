@@ -1,0 +1,9 @@
+# Auto TTS for NVDA: Gurmukhi Punjabi symbols
+# Registered through [symbolDictionaries] in manifest.ini.
+complexSymbols:
+
+symbols:
+# identifier	replacement[[	level][	preserve]][	# display name]
+।	ਡੰਡੀ	some	always	# Danda
+॥	ਦੋ ਡੰਡੀਆਂ	some	always	# Double danda
+☬	ਖੰਡਾ	none	# Khanda

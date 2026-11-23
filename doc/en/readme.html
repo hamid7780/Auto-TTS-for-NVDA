@@ -8,7 +8,7 @@
 </head>
 <body>
 <h1>Auto TTS for NVDA</h1>
-<p>Version 1.1.2.</p>
+<p>Version 1.2.0.</p>
 <p>Auto TTS is an add-on for the NVDA screen reader. It looks at the text NVDA is about to read, works out which language each part is written in, and reads each part with the voice you picked for that language. If you read Urdu, Arabic and English in the same page, message or document, you no longer have to change voices by hand.</p>
 <p><strong><a href="https://github.com/hamid7780/Auto-TTS-for-NVDA/releases/latest">Download the latest release</a></strong></p>
 <p>Needs NVDA 2023.3 or newer, 32-bit or 64-bit. Last tested with NVDA 2026.3.1. Free software under the GPL-2.0 license.</p>
@@ -96,16 +96,21 @@
 <p>Detection works in three steps.</p>
 <ol>
 <li><strong>Writing system.</strong> Each script is linked to a language. By default Latin letters go to English, Arabic script to Urdu, Devanagari to Hindi, Cyrillic to Russian, and so on.</li>
-<li><strong>Urdu and Arabic.</strong> Arabic script is shared by both languages, so Auto TTS looks for letters and marks that only one of them uses. Quranic text and tashkeel go to Arabic.</li>
+<li><strong>Arabic script.</strong> Urdu, Arabic, Persian, Pashto and Sindhi share one script. Auto TTS looks at the whole sentence for letters only one of them uses, such as ے and ڑ for Urdu, ة for Arabic, ځ for Pashto or ڪ for Sindhi, plus Quranic marks and tashkeel. When no letter settles it, the FastText model decides. Inside an Urdu sentence, a quoted Arabic phrase such as بسم الله الرحمن الرحيم gets the Arabic voice, while a single borrowed word stays with the sentence. Urdu typed on an Arabic keyboard (ي and ك) is still read as Urdu.</li>
 <li><strong>Languages that share a script.</strong> For text in the same script, such as English, French and German, a small offline FastText model picks the language. Regional shared scripts like Perso-Arabic (Urdu, Arabic, Persian), Devanagari (Hindi, Marathi, Nepali), and Bengali/Assamese use character heuristics and dedicated n-gram language models.</li>
 </ol>
 <p>Text in a language that has no enabled profile is read with the default voice.</p>
+<p>NVDA's own words, such as "link", "button" or "checked", are never given to the FastText model, so a role or state name is not read with a voice for another language.</p>
+<h3>Symbols and honorific signs</h3>
+<p>Punctuation inside a sentence stays with the words around it and is never read aloud by name. When a line, or a character you move to or type, holds only symbols, Auto TTS reads each symbol by name in the language of its script: a line with only <code>؟</code> is read as "سوالیہ نشان" with your Urdu voice, even when your default language is English.</p>
+<p>Arabic-script honorific signs and word ligatures, such as <code>ؑ</code> (علیہ السلام), <code>ؓ</code> (رضی اللہ عنہ) and <code>ﷺ</code> (صلی اللہ علیہ وسلم), stand for whole words, so they are always read as those words with every synthesizer, alone or inside a sentence. Urdu and Shahmukhi Punjabi profiles use the Urdu spelling; other Arabic-script languages use the Arabic spelling.</p>
+<p>The add-on also gives NVDA a symbol dictionary for Urdu and Punjabi, named <strong>Auto TTS Urdu and Punjabi symbols</strong>, so these names are used wherever NVDA itself reads symbols in those languages. It needs NVDA 2024.4 or newer; on older versions Auto TTS still reads the symbols itself.</p>
 <h2>Excluded applications</h2>
 <p>In an excluded application, Auto TTS does not switch voices and reads everything with your default language. These programs are excluded by default: Visual Studio Code, Command Prompt, PowerShell, Windows Terminal, Visual Studio and Notepad++. Open <strong>Excluded Applications</strong> in the settings to add or remove programs. Type the program name, for example <code>notepad.exe</code>. The <code>.exe</code> ending is added if you leave it out.</p>
 <h2>Language lock</h2>
-<p>Press NVDA+Alt+L to read everything with one language profile, whatever the text says. Press it again to go back to automatic switching. The lock is cleared when NVDA restarts.</p>
+<p>Press NVDA+Alt+L to read everything with one language profile, whatever the text says. Press it again to go back to automatic switching. You can also choose <strong>Language lock</strong> in NVDA's synthesizer settings ring or in NVDA's Voice settings. The lock is cleared when NVDA restarts.</p>
 <h2>Synthesizer settings ring</h2>
-<p>In NVDA's synthesizer settings ring, the Voice setting moves between your language profiles. Rate, pitch and volume change the speed, pitch and volume used for the selected profile.</p>
+<p>In NVDA's synthesizer settings ring, the Voice setting moves between your language profiles. Rate, pitch and volume change the speed, pitch and volume used for the selected profile, and a change is heard from the next thing NVDA says.</p>
 <h2>Backup and where settings are kept</h2>
 <p>Use <strong>Export Settings</strong> to back up your profiles or to copy them to another computer, and <strong>Import Settings</strong> to restore them. Settings are stored in the NVDA user configuration folder, usually <code>%APPDATA%\nvda</code>, in <code>autoTTS.json</code>. A copy named <code>autoTTS.json.bak</code> is kept next to it.</p>
 <h2>If something does not work</h2>
@@ -119,7 +124,8 @@
 <p>If you report a problem, include the NVDA log. Open it with NVDA+F1. Lines from this add-on start with <code>AutoTTS:</code>. For a report about speech starting late, set the logging level to Debug in NVDA's General settings, reproduce the problem, and include the lines that say <code>took</code>. You can also open the Auto TTS log folder from settings.</p>
 <h2>Known limitations</h2>
 <ul>
-<li>Urdu written in English letters (Roman Urdu) is detected as English.</li>
+<li>Urdu written in English letters (Roman Urdu) is detected as English. Urdu voices cannot read English letters as Urdu, so detecting it would not help until the text is also converted to Urdu script.</li>
+<li>Sindhi or Pashto that uses none of its own letters can only be told apart from Urdu by the FastText model, which needs a few words of text.</li>
 <li>A single short word in a shared script is not guessed, to avoid constant voice changes. A clear change of script, such as Urdu to English, still switches on that word.</li>
 <li>Online synthesizers need an internet connection, and Auto TTS cannot make them faster.</li>
 </ul>
