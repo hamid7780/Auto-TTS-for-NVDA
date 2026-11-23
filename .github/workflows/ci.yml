@@ -80,13 +80,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          $tag = $env:GITHUB_REF_NAME
+          $title = "Auto TTS $($tag.Substring(1))"
           $assets = @(Get-ChildItem dist -File | ForEach-Object FullName)
-          gh release view $env:GITHUB_REF_NAME --json tagName 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            gh release edit $env:GITHUB_REF_NAME --title "Auto TTS $($env:GITHUB_REF_NAME.Substring(1))" --notes-file RELEASE_NOTES.md --latest
+          # Find the release by tag name, drafts included. When a tag is deleted and pushed
+          # again, GitHub turns its release into a draft that `gh release view <tag>` cannot
+          # see, and creating a new release for the same tag then fails.
+          $json = gh api "repos/$env:GH_REPO/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $release = ($json | Out-String | ConvertFrom-Json) | Where-Object { $_.tag_name -eq $tag } | Select-Object -First 1
+          if ($release) {
+            gh api --method PATCH "repos/$env:GH_REPO/releases/$($release.id)" -F draft=false -f "tag_name=$tag" -f "name=$title" -F "body=@RELEASE_NOTES.md" -f make_latest=true | Out-Null
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            gh release upload $env:GITHUB_REF_NAME @assets --clobber
+            gh release upload $tag @assets --clobber
           } else {
-            gh release create $env:GITHUB_REF_NAME @assets --verify-tag --title "Auto TTS $($env:GITHUB_REF_NAME.Substring(1))" --notes-file RELEASE_NOTES.md --latest
+            gh release create $tag @assets --verify-tag --title $title --notes-file RELEASE_NOTES.md --latest
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
