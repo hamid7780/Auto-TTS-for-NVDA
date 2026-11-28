@@ -8,7 +8,7 @@
 </head>
 <body>
 <h1>Auto TTS for NVDA</h1>
-<p>Version 1.2.0.</p>
+<p>Version 1.2.1.</p>
 <p>Auto TTS is an add-on for the NVDA screen reader. It looks at the text NVDA is about to read, works out which language each part is written in, and reads each part with the voice you picked for that language. If you read Urdu, Arabic and English in the same page, message or document, you no longer have to change voices by hand.</p>
 <p><strong><a href="https://github.com/hamid7780/Auto-TTS-for-NVDA/releases/latest">Download the latest release</a></strong></p>
 <p>Needs NVDA 2023.3 or newer, 32-bit or 64-bit. Last tested with NVDA 2026.3.1. Free software under the GPL-2.0 license.</p>
@@ -48,12 +48,12 @@
 </tr></thead>
 <tbody>
 <tr><td>NVDA+Alt+A</td><td>Open the Auto TTS settings</td></tr>
-<tr><td>NVDA+Shift+L</td><td>Turn automatic language switching on or off</td></tr>
-<tr><td>NVDA+Alt+L</td><td>Lock Auto TTS to one language profile, or unlock it</td></tr>
-<tr><td>NVDA+Ctrl+T</td><td>Say whether Auto TTS is on and whether a language is locked</td></tr>
+<tr><td>NVDA+Alt+Shift+A</td><td>Turn automatic language switching on or off</td></tr>
+<tr><td>NVDA+Alt+Shift+L</td><td>Lock Auto TTS to one language profile, or unlock it</td></tr>
+<tr><td>NVDA+Alt+Shift+T</td><td>Say whether Auto TTS is on and whether a language is locked</td></tr>
 </tbody>
 </table>
-<p>You can change these under Preferences, Input gestures, in the Auto TTS category. NVDA also uses NVDA+Ctrl+T to switch the braille tether, and add-on shortcuts take priority, so braille display users should assign a different key to the status command.</p>
+<p>You can change these under Preferences, Input gestures, in the Auto TTS category. None of them is used by NVDA 2026.3.1 itself. Before version 1.2.1 the add-on used NVDA+Shift+L, NVDA+Alt+L and NVDA+Ctrl+T, which NVDA also uses for the magnifier overview, the braille scroll rate and the braille tether. If you had assigned your own keys to these commands, they are kept.</p>
 <h2>Settings</h2>
 <table>
 <caption>Settings</caption>
@@ -62,7 +62,7 @@
 <th scope="col">What it does</th>
 </tr></thead>
 <tbody>
-<tr><td>Enable Automatic Language Switching</td><td>Turns detection on or off. The same as NVDA+Shift+L.</td></tr>
+<tr><td>Enable Automatic Language Switching</td><td>Turns detection on or off. The same as NVDA+Alt+Shift+A.</td></tr>
 <tr><td>Use Unicode-based language detection</td><td>Chooses the language from the writing system of the text.</td></tr>
 <tr><td>Smart same-script language detection</td><td>Tells apart languages that share a script, such as English and French, using the bundled FastText model. Works offline.</td></tr>
 <tr><td>Smart Arabic/Urdu automatic separation</td><td>Separates Urdu from Arabic, and sends Quranic text with tashkeel to Arabic.</td></tr>
@@ -109,7 +109,7 @@
 <h2>Excluded applications</h2>
 <p>In an excluded application, Auto TTS does not switch voices and reads everything with your default language. These programs are excluded by default: Visual Studio Code, Command Prompt, PowerShell, Windows Terminal, Visual Studio and Notepad++. Open <strong>Excluded Applications</strong> in the settings to add or remove programs. Type the program name, for example <code>notepad.exe</code>. The <code>.exe</code> ending is added if you leave it out.</p>
 <h2>Language lock</h2>
-<p>Press NVDA+Alt+L to read everything with one language profile, whatever the text says. Press it again to go back to automatic switching. You can also choose <strong>Language lock</strong> in NVDA's synthesizer settings ring or in NVDA's Voice settings. The lock is cleared when NVDA restarts.</p>
+<p>Press NVDA+Alt+Shift+L to read everything with one language profile, whatever the text says. Press it again to go back to automatic switching. You can also choose <strong>Language lock</strong> in NVDA's synthesizer settings ring or in NVDA's Voice settings. The lock is cleared when NVDA restarts.</p>
 <h2>Synthesizer settings ring</h2>
 <p>In NVDA's synthesizer settings ring, the Voice setting moves between your language profiles. Rate, pitch and volume change the speed, pitch and volume used for the selected profile, and a change is heard from the next thing NVDA says.</p>
 <h2>Backup and where settings are kept</h2>
@@ -117,7 +117,7 @@
 <h2>If something does not work</h2>
 <ol>
 <li>Check that <strong>Auto TTS for NVDA</strong> is the selected synthesizer (NVDA+Ctrl+S).</li>
-<li>Press NVDA+Ctrl+T to hear whether Auto TTS is on or locked to a language.</li>
+<li>Press NVDA+Alt+Shift+T to hear whether Auto TTS is on or locked to a language.</li>
 <li>Open the profile for the language and check that it is enabled and that <strong>Test Speech</strong> works.</li>
 <li>Check that the program you are using is not in the excluded list.</li>
 <li>Check that the voice named in the profile is still installed.</li>

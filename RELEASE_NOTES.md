@@ -1,4 +1,15 @@
-## What's new in 1.2.0
+## What's new in 1.2.1
+
+Three keyboard shortcuts no longer clash with NVDA's own commands:
+
+- **NVDA+Alt+Shift+A** turns automatic language switching on or off (was NVDA+Shift+L).
+- **NVDA+Alt+Shift+L** locks or unlocks a language (was NVDA+Alt+L).
+- **NVDA+Alt+Shift+T** says whether Auto TTS is on or locked (was NVDA+Ctrl+T).
+- **NVDA+Alt+A** still opens the settings.
+
+Keys you assigned yourself under Preferences, Input gestures are kept.
+
+## Also in 1.2.0 (previous release)
 
 Version 1.2.0 fixes how Auto TTS reads Urdu symbols and honorific signs, and fixes several long-standing bugs:
 

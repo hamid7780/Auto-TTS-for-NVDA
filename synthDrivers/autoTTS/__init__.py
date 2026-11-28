@@ -191,7 +191,7 @@ def _buildSupportedSettings():
 			NumericDriverSetting("pitch", _("&Pitch"), minStep=1, minVal=0, maxVal=100, availableInSettingsRing=True),
 			NumericDriverSetting("volume", _("V&olume"), minStep=1, minVal=0, maxVal=100, availableInSettingsRing=True),
 		]
-	# The language lock (NVDA+Alt+L) is also reachable from the settings ring. useConfig=False:
+	# The language lock (NVDA+Alt+Shift+L) is also reachable from the settings ring. useConfig=False:
 	# NVDA never stores it, so a lock always ends when NVDA restarts.
 	settings.append(DriverSetting("languageLock", _("&Language lock"), availableInSettingsRing=True, useConfig=False))
 	return tuple(settings)

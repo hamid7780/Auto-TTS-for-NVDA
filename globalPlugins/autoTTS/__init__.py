@@ -65,7 +65,7 @@ class LanguageLockDialog(wx.SingleChoiceDialog):
 		super().__init__(
 			parent,
 			_("Select a language profile to lock Auto TTS into.\n"
-			  "All text will be read with this voice until you press NVDA+Alt+L again:"),
+			  "All text will be read with this voice until you press NVDA+Alt+Shift+L again:"),
 			_("Lock Auto TTS Language"),
 			choices,
 		)
@@ -85,7 +85,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	"""
 	Global plugin for Auto TTS for NVDA.
 	Provides settings category registration, customizable input gestures under 'Auto TTS' category,
-	quick settings shortcut (NVDA+Alt+A), language lock (NVDA+Alt+L), toggle (NVDA+Shift+L),
+	quick settings shortcut (NVDA+Alt+A), language lock (NVDA+Alt+Shift+L), toggle (NVDA+Alt+Shift+A), status (NVDA+Alt+Shift+T),
 	and first-run onboarding prompt.
 	"""
 
@@ -264,7 +264,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		wx.CallAfter(self._openSettings)
 
 	@script(
-		gesture="kb:NVDA+shift+l",
+		gesture="kb:NVDA+alt+shift+a",
 		description=_("Toggles Auto TTS automatic language switching on and off"),
 		category=_("Auto TTS")
 	)
@@ -303,7 +303,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 					selectedCode = dlg.getSelectedLangCode()
 					sharedConfig.lockedLanguage = selectedCode
 					langName = _getLangName(selectedCode)
-					ui.message(_("Locked to {lang}. Press NVDA+Alt+L again to unlock.").format(lang=langName))
+					ui.message(_("Locked to {lang}. Press NVDA+Alt+Shift+L again to unlock.").format(lang=langName))
 			finally:
 				dlg.Destroy()
 				if mainFrame and hasattr(gui.mainFrame, "postPopup"):
@@ -316,7 +316,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				pass
 
 	@script(
-		gesture="kb:NVDA+alt+l",
+		gesture="kb:NVDA+alt+shift+l",
 		description=_("Locks Auto TTS to a single language profile or unlocks it"),
 		category=_("Auto TTS")
 	)
@@ -335,7 +335,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		wx.CallAfter(self._openLanguageLockDialog)
 
 	@script(
-		gesture="kb:NVDA+control+t",
+		gesture="kb:NVDA+alt+shift+t",
 		description=_("Announces Auto TTS status and active language lock"),
 		category=_("Auto TTS")
 	)

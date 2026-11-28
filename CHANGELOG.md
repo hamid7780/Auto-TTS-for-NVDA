@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- Changed three keyboard shortcuts that NVDA 2026.3.1 already uses. Turning automatic language switching on or off is now NVDA+Alt+Shift+A (was NVDA+Shift+L, NVDA's magnifier overview). The language lock is now NVDA+Alt+Shift+L (was NVDA+Alt+L, NVDA's braille scroll rate). The status announcement is now NVDA+Alt+Shift+T (was NVDA+Ctrl+T, NVDA's braille tether). NVDA+Alt+A still opens the settings. Keys you assigned yourself in Input gestures are kept.
+
 ## 1.2.0
 
 - Fixed silent symbol lines: a line, or a character you move to or type, that holds only symbols such as `؟`, `۔` or `؎` is now read by name in the language of its script with every synthesizer, including eSpeak NG. Punctuation inside a sentence is no longer switched to another voice.
